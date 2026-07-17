@@ -1,0 +1,15 @@
+{
+  "name": "Dream Run",
+  "short_name": "Dream Run",
+  "description": "Το όνειρο καταρρέει. Τρέξε πριν σε προλάβει το ξύπνημα.",
+  "lang": "el",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#2a1e5c",
+  "theme_color": "#2a1e5c",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
