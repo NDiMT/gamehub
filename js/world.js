@@ -185,8 +185,19 @@ export class World {
     }));
     this.scene.add(this.skyStars);
 
-    // Το φεγγάρι κάθεται ψηλά στο βάθος
+    // Το φεγγάρι κάθεται ψηλά στο βάθος — αυτοφωτιζόμενο, αγνοεί την ομίχλη
+    // αλλιώς το GLB βγαίνει σκούρα σιλουέτα στο fog
     this.moon = this.#template("crescent_moon");
+    this.moon.traverse((o) => {
+      if (o.isMesh && o.material) {
+        o.material = o.material.clone();
+        o.material.fog = false;
+        if ("emissive" in o.material) {
+          o.material.emissive = new THREE.Color(0xfff3c4);
+          o.material.emissiveIntensity = 0.75;
+        }
+      }
+    });
     this.moon.position.set(7, 22, -120);
     this.moon.scale.setScalar(3);
     this.moon.visible = true;
