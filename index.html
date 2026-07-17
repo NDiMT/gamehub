@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Metro Dash</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="game-container"></div>
+
+  <div id="hud" class="hidden">
+    <div id="score">0</div>
+    <div id="coins">🪙 0</div>
+    <div id="highscore">BEST 0</div>
+  </div>
+
+  <div id="start-screen" class="overlay">
+    <h1>METRO DASH</h1>
+    <p class="subtitle">Ένα endless runner στους δρόμους του μετρό</p>
+    <button id="start-btn">ΠΑΙΞΕ</button>
+    <div class="controls-help">
+      <span>← → αλλαγή λωρίδας</span>
+      <span>↑ / Space άλμα</span>
+      <span>↓ κύλισμα</span>
+      <span>ή swipe στο κινητό</span>
+    </div>
+  </div>
+
+  <div id="gameover-screen" class="overlay hidden">
+    <h1>GAME OVER</h1>
+    <p id="final-score">Σκορ: 0</p>
+    <p id="final-best" class="subtitle"></p>
+    <button id="restart-btn">ΞΑΝΑ (R)</button>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

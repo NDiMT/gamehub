@@ -1,0 +1,130 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0d0d1a;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#game-container,
+#game-container canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------- HUD ---------- */
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 20px;
+  pointer-events: none;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+#score {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+#coins {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #ffd83d;
+}
+
+#highscore {
+  font-size: 1rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* ---------- Overlays ---------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(8, 8, 20, 0.72);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  text-align: center;
+  z-index: 10;
+}
+
+.overlay h1 {
+  font-size: clamp(2.4rem, 8vw, 4.5rem);
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: linear-gradient(180deg, #ffd83d, #ff8a3d);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 4px 12px rgba(255, 160, 60, 0.35));
+}
+
+.overlay .subtitle {
+  opacity: 0.75;
+  font-size: 1.05rem;
+}
+
+.overlay button {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  padding: 14px 52px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #1a1a2e;
+  background: linear-gradient(180deg, #ffd83d, #ffb23d);
+  box-shadow: 0 6px 20px rgba(255, 180, 60, 0.4);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.overlay button:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 10px 26px rgba(255, 180, 60, 0.55);
+}
+
+#final-score {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.controls-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  justify-content: center;
+  margin-top: 10px;
+  font-size: 0.95rem;
+  opacity: 0.65;
+}
