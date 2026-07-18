@@ -37,6 +37,9 @@ export const MONSTERS = {
   hollow: { id: "hollow", name: "Hollow", move: 6, attack: 2, defense: 2, body: 1, color: 0xb8b8a8 },
   acolyte: { id: "acolyte", name: "Acolyte", move: 6, attack: 3, defense: 3, body: 2, color: 0x4a3060 },
   stonewrath: { id: "stonewrath", name: "STONEWRATH", move: 6, attack: 4, defense: 4, body: 3, color: 0x707078, boss: true },
+  wraith: { id: "wraith", name: "Wraith", move: 8, attack: 2, defense: 3, body: 1, color: 0x8ab8d8 },
+  rotfang: { id: "rotfang", name: "Rotfang", move: 12, attack: 1, defense: 1, body: 1, color: 0x9a6a4a },
+  dreadknight: { id: "dreadknight", name: "Dread Knight", move: 5, attack: 4, defense: 3, body: 2, color: 0x3a3a48 },
 };
 
 // Combat die: 3 skull faces, 2 white shields, 1 black shield

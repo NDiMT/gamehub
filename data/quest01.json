@@ -284,6 +284,42 @@
         2
       ],
       "area": "boss"
+    },
+    {
+      "id": "r1",
+      "type": "rotfang",
+      "cell": [
+        7,
+        11
+      ],
+      "area": "spine"
+    },
+    {
+      "id": "r2",
+      "type": "rotfang",
+      "cell": [
+        6,
+        10
+      ],
+      "area": "cross"
+    },
+    {
+      "id": "w1",
+      "type": "wraith",
+      "cell": [
+        3,
+        10
+      ],
+      "area": "cross"
+    },
+    {
+      "id": "dk1",
+      "type": "dreadknight",
+      "cell": [
+        6,
+        3
+      ],
+      "area": "boss"
     }
   ],
   "furniture": [

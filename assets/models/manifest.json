@@ -102,6 +102,24 @@
       "file": "assets/models/prop_bones.glb",
       "bytes": 3041140,
       "taskId": "019f75e4-f3eb-7abd-a04c-b0c22d5d6b68"
+    },
+    {
+      "name": "mob_wraith",
+      "file": "assets/models/mob_wraith.glb",
+      "bytes": 4057736,
+      "taskId": "019f7608-441a-732a-a386-c6e3923947c9"
+    },
+    {
+      "name": "mob_rotfang",
+      "file": "assets/models/mob_rotfang.glb",
+      "bytes": 3757268,
+      "taskId": "019f7608-11b6-715c-9637-3f5c4b1a1878"
+    },
+    {
+      "name": "mob_dreadknight",
+      "file": "assets/models/mob_dreadknight.glb",
+      "bytes": 4101344,
+      "taskId": "019f7608-7776-716b-be2e-e9d72c64028f"
     }
   ],
   "failures": []

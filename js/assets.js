@@ -7,6 +7,7 @@ import { GLTFLoader } from "../lib/addons/loaders/GLTFLoader.js";
 const TARGET_HEIGHT = {
   hero_warrior: 1.15, hero_sapper: 1.05, hero_shadowarcher: 1.15, hero_mystic: 1.15,
   mob_grunt: 0.9, mob_hollow: 1.05, mob_acolyte: 1.1, boss_stonewrath: 1.6,
+  mob_wraith: 1.2, mob_rotfang: 0.7, mob_dreadknight: 1.25,
   prop_door: 1.5, prop_chest: 0.6, prop_stairs: 1.0,
   prop_pillar: 1.7, prop_sarcophagus: 0.8, prop_altar: 1.0,
   prop_bookshelf: 1.5, prop_barrel: 0.75, prop_bones: 0.28,

@@ -326,11 +326,12 @@ export const commands = {
     hero.searchedTreasure.push(area);
     s.turn.actionUsed = true;
 
-    // Παγιδευμένο σεντούκι πριν από οτιδήποτε
+    // Παγιδευμένο σεντούκι: η παγίδα σκάει ΠΡΩΤΑ (ζημιά/τέλος γύρου),
+    // αλλά ο θησαυρός αποκαλύπτεται κανονικά αμέσως μετά.
     const chestTrap = (s.quest.traps || []).find((t) => t.type === "chest" && t.area === area);
     if (chestTrap && !s.traps[chestTrap.id].disarmed && !s.traps[chestTrap.id].triggered) {
       triggerTrap(s, board, hero, chestTrap);
-      return true;
+      if (s.phase !== "playing" || !hero.alive) return true; // αν έπεσε, δεν προλαβαίνει το λάφυρο
     }
 
     // Ειδικός θησαυρός quest
