@@ -548,6 +548,50 @@ input {
 #end-stats { display: flex; flex-direction: column; gap: 6px; font-size: 0.95rem; }
 .end-hero b { color: var(--gold-hi); }
 
+/* ---------- Armory (μεταξύ των quests) ---------- */
+
+#screen-armory { justify-content: flex-start; gap: 10px; }
+#armory-interlude {
+  font-style: italic; opacity: 0.7;
+  max-width: 360px; font-size: 0.88rem; line-height: 1.5;
+}
+#armory-tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.armory-tab {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 14px; min-height: 44px;
+  font-size: 0.85rem;
+}
+.armory-tab small { font-size: 0.7rem; opacity: 0.75; font-family: system-ui, sans-serif; }
+.armory-tab.sel {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, #5a3f1e, #3d2a12);
+  box-shadow: 0 0 12px rgba(201, 162, 39, 0.35);
+}
+.armory-tab b { color: var(--gold-hi); }
+#armory-items {
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(400px, 94vw);
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  touch-action: pan-y;
+  padding: 2px;
+}
+.armory-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px; align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.armory-item b { color: var(--gold-hi); }
+.armory-item small { display: block; opacity: 0.65; font-size: 0.72rem; font-family: system-ui, sans-serif; }
+.armory-item.owned { opacity: 0.55; }
+.ai-buy { min-height: 40px; padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; }
+
 #toast {
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 92px);

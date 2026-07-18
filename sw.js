@@ -5,7 +5,7 @@ const CORE_ASSETS = [
   ".", "index.html", "css/style.css",
   "js/main.js", "js/config.js", "js/state.js", "js/board.js", "js/ai.js",
   "js/net.js", "js/assets.js", "js/render3d.js", "js/ui.js",
-  "data/quest01.json",
+  "data/quest01.json", "data/quest02.json", "data/quest03.json", "data/campaign.json",
   "lib/three.module.min.js", "lib/peerjs.min.js",
   "lib/addons/loaders/GLTFLoader.js", "lib/addons/utils/BufferGeometryUtils.js",
   "manifest.webmanifest",

@@ -1,0 +1,11 @@
+{
+  "id": "long_descent",
+  "title": "The Long Descent",
+  "blurb": "Three levels beneath the Shadowkeep, an old crown waits to be worn again.",
+  "quests": ["quest01", "quest02", "quest03"],
+  "interludes": [
+    "The Warden lies in rubble, but the water beneath the keep still whispers. Somewhere in the flooded cisterns the Pale Chalice keeps the drowned dead sleeping — and something down there is trying to wake them. Rest, spend your spoils, and descend.",
+    "The Chalice is out of the dark and the flood recedes. Deeper still lies the Undercrown, a throne-hall of bone where the Warden's masters were crowned. End this — leave nothing alive in the deep."
+  ],
+  "epilogue": "The Undercrown is silent. Dawn finds the heroes on the crypt steps, pockets heavy and shadows short. The Shadowkeep is bound once more — by their hand, and for good."
+}

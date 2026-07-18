@@ -1,7 +1,7 @@
-import { createGame, commands, advanceTurn, blinkCells } from "./state.js";
+import { createGame, commands, advanceTurn, blinkCells, thrownWeaponFor } from "./state.js";
 import { runMonsterPhase } from "./ai.js";
 import { buildBoard, reachableCells, pathTo, key, isAdjacent, lineOfSight, areaAt } from "./board.js";
-import { HEROES, SPELLS, BUILD } from "./config.js";
+import { HEROES, SPELLS, BUILD, ARMORY } from "./config.js";
 import { loadMinis } from "./assets.js";
 import { BoardView } from "./render3d.js";
 import { createUI } from "./ui.js";
@@ -23,14 +23,73 @@ let uiMode = { selecting: null, pendingMove: null }; // selecting: "attack"|"spe
 
 const myName = () => (ui.el.nameInput.value || "Hero").trim().slice(0, 14);
 
+// ---------- Καμπάνια & αποθήκευση ----------
+// Ο HOST κατέχει το save (localStorage). Νίκη → αποθήκευση προόδου· οι guests
+// απλώς ξαναμπαίνουν με κωδικό και το «σακίδιό» τους έρχεται από το save του
+// host (ταίριασμα κατά heroId). Ήττα δεν σβήνει τίποτα — ξαναπαίζεις το quest.
+let campaign = null;      // data/campaign.json
+let questIndex = 0;       // ποιο quest της καμπάνιας παίζεται τώρα
+let campaignMode = "host"; // "solo" | "host" — για το Continue
+let questVictoryHandled = false;
+let finalStats = null;    // στατιστικά για την οθόνη ολοκλήρωσης
+const SAVE_KEY = "cryptbound.campaign";
+
+const loadSave = () => {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; }
+};
+const writeSave = (s) => localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+const clearSave = () => localStorage.removeItem(SAVE_KEY);
+const loadQuest = (i) => fetch(`data/${campaign.quests[i]}.json`).then((r) => r.json());
+
+function refreshContinueButton() {
+  const save = loadSave();
+  ui.el.btnContinue.classList.toggle("hidden", !save);
+  if (save) {
+    ui.el.btnContinue.textContent =
+      `⤵ Continue campaign — Quest ${save.questIndex + 1}/${campaign.quests.length}`;
+  }
+}
+
+// Νέο ξεκίνημα πατάει πάνω σε σωζόμενη καμπάνια; Ρώτα πρώτα.
+function confirmFresh() {
+  const save = loadSave();
+  if (!save) return true;
+  if (!confirm("A saved campaign is underway. Starting fresh will erase it. Continue?")) return false;
+  clearSave();
+  refreshContinueButton();
+  return true;
+}
+
+// Μόνιμο «σακίδιο» ανά ήρωα από το save — τροφοδοτεί το createGame
+function carryFromSave() {
+  return loadSave()?.heroes || {};
+}
+
 // ---------- Home ----------
-ui.el.btnHost.addEventListener("click", () => startHost(pickTransport()));
-ui.el.btnSolo.addEventListener("click", () => startHost(loopbackTransport(), true));
+ui.el.btnHost.addEventListener("click", () => {
+  if (!confirmFresh()) return;
+  questIndex = 0;
+  startHost(pickTransport());
+});
+ui.el.btnSolo.addEventListener("click", () => {
+  if (!confirmFresh()) return;
+  questIndex = 0;
+  startHost(loopbackTransport(), true);
+});
 ui.el.btnJoin.addEventListener("click", startJoin);
+ui.el.btnContinue.addEventListener("click", async () => {
+  const save = loadSave();
+  if (!save) return;
+  questIndex = Math.min(save.questIndex, campaign.quests.length - 1);
+  quest = await loadQuest(questIndex);
+  startHost(save.mode === "solo" ? loopbackTransport() : pickTransport(), save.mode === "solo");
+});
 
 async function startHost(transport, solo = false) {
   try {
     ui.el.homeError.textContent = "";
+    campaignMode = solo ? "solo" : "host";
+    if (quest.id !== campaign.quests[questIndex]) quest = await loadQuest(questIndex);
     const code = solo ? "SOLO" : makeRoomCode();
     const room = await transport.hostRoom(code);
     isHost = true;
@@ -119,12 +178,11 @@ ui.el.btnStart.addEventListener("click", async () => {
   if (!isHost) return;
   const players = lobby.players.filter((p) => p.heroId);
   if (!players.length) return;
-  state = createGame(quest, players, Date.now() % 2147483647);
+  questVictoryHandled = false;
+  state = createGame(quest, players, Date.now() % 2147483647, carryFromSave());
   await enterGame();
   broadcastState();
 });
-
-ui.el.btnAgain.addEventListener("click", () => location.reload());
 
 // ---------- Host: εφαρμογή εντολών ----------
 function hostApply(seat, cmd, args) {
@@ -149,7 +207,61 @@ function hostApply(seat, cmd, args) {
       runMonsterPhase(state, monsterAttack);
     }
   }
+  // Νίκη quest → ο host γράφει την πρόοδο της καμπάνιας (μία φορά)
+  if (state.phase === "victory" && !questVictoryHandled) {
+    questVictoryHandled = true;
+    handleQuestVictory();
+  }
   broadcastState();
+}
+
+// ---------- Πρόοδος καμπάνιας (μόνο host) ----------
+function handleQuestVictory() {
+  const isLast = questIndex >= campaign.quests.length - 1;
+  if (isLast) {
+    finalStats = computeFinalStats();
+    clearSave(); // η καμπάνια τελείωσε — καθαρό ξεκίνημα την επόμενη φορά
+  } else {
+    saveProgress();
+  }
+}
+
+function saveProgress() {
+  const prev = loadSave();
+  const heroes = {};
+  for (const h of Object.values(state.heroes)) {
+    heroes[h.id] = {
+      // Νεκροί ήρωες: σέρνονται πίσω στην επιφάνεια — παίζουν στο επόμενο
+      // quest, αλλά το χρυσάφι τους το κράτησε η κρύπτη (χάνεται).
+      gold: h.alive ? h.gold : 0,
+      potions: [...h.potions],
+      artifacts: h.artifacts.filter((a) => !a.relic), // κειμήλια = παραδίδονται
+      equipment: [...(h.equipment || [])],
+      deaths: (prev?.heroes?.[h.id]?.deaths || 0) + (h.alive ? 0 : 1),
+    };
+  }
+  writeSave({
+    v: 1,
+    campaignId: campaign.id,
+    mode: campaignMode,
+    questIndex: questIndex + 1, // το ΕΠΟΜΕΝΟ quest που θα παιχτεί
+    stats: {
+      deaths: Object.values(heroes).reduce((n, h) => n + h.deaths, 0),
+      rounds: (prev?.stats?.rounds || 0) + state.round,
+    },
+    heroes,
+  });
+}
+
+function computeFinalStats() {
+  const prev = loadSave(); // πρόοδος ΠΡΙΝ το τελευταίο quest (μπορεί να λείπει)
+  return {
+    gold: Object.values(state.heroes).reduce((n, h) => n + (h.alive ? h.gold : 0), 0),
+    deaths: (prev?.stats?.deaths || 0) +
+      Object.values(state.heroes).filter((h) => !h.alive).length,
+    rounds: (prev?.stats?.rounds || 0) + state.round,
+    quests: campaign.quests.length,
+  };
 }
 
 // ---------- State διάδοση ----------
@@ -171,8 +283,20 @@ function serializable(s) {
 // το αποτέλεσμα πριν πέσουν τα ζάρια.
 let pendingRender = null;
 async function onStateReceived(newState, fx = {}) {
-  if (!isHost) state = newState;
-  if (!view) await enterGame(); // guest: πρώτο state → μπες στο ταμπλό
+  if (!isHost) {
+    state = newState;
+    // Ο guest μαθαίνει σε ποιο quest της καμπάνιας είναι από το state
+    const idx = campaign.quests.indexOf(state.quest.id);
+    if (idx >= 0) questIndex = idx;
+  }
+  if (!view) {
+    quest = state.quest; // guest: το quest έρχεται ΜΕΣΑ στο state (όχι το boot quest01)
+    await enterGame();   // πρώτο state → μπες στο ταμπλό
+  } else if (state.quest.id !== view.quest.id) {
+    // Νέο quest της καμπάνιας έφτασε (μετά το Armory): ξαναχτίσε το ταμπλό
+    quest = state.quest;
+    rebuildForNewQuest();
+  }
 
   const events = fx.fx || [];
   if (events.length || fxPlaying) {
@@ -217,8 +341,100 @@ function applyRender(s) {
     ui.toast("Your turn is over — tap End.");
   }
 
-  if (s.phase !== "playing") setTimeout(() => ui.showEnd(s), 1200);
+  if (s.phase !== "playing") setTimeout(() => ui.showEnd(s, endScreenOpts(s)), 1200);
   highlightForMode(s);
+}
+
+// ---------- Τέλος quest → ροή καμπάνιας ----------
+// Νίκη σε ενδιάμεσο quest: ο host περνά από το Armory, οι guests περιμένουν
+// (η επόμενη πίστα τούς έρχεται ως state snapshot — καμία νέα δικτυακή ροή).
+function endScreenOpts(s) {
+  const isLast = questIndex >= campaign.quests.length - 1;
+  if (s.phase !== "victory") {
+    return {
+      text: "The crypt keeps its heroes. Regroup on the surface — the campaign can continue from where it stood.",
+      buttonLabel: "↺ Back to the surface",
+    };
+  }
+  if (isLast) {
+    const st = finalStats || computeFinalStats();
+    return {
+      title: "SAGA COMPLETE",
+      text: `${campaign.title} is over. ${campaign.epilogue}`,
+      extraStats: `<div class="end-hero dim">— ${st.quests} quests · ${st.rounds} rounds · ` +
+        `💰${st.gold} banked · ☠${st.deaths} falls —</div>`,
+      buttonLabel: "🏆 Rest at last",
+    };
+  }
+  if (!isHost) {
+    return {
+      text: `${s.quest.outro || ""} The host is outfitting the party at the Armory — the descent continues shortly...`,
+      hideButton: true,
+    };
+  }
+  return { text: s.quest.outro, buttonLabel: "⚒ To the Armory", onButton: openArmory };
+}
+
+// Armory: ο host ψωνίζει για όλους τους ήρωες πάνω στο SAVE (όχι στο state) —
+// το επόμενο createGame διαβάζει το save και μοιράζει τα πράγματα.
+function openArmory() {
+  const players = lobby.players.filter((p) => p.heroId);
+  ui.showArmory({
+    interlude: campaign.interludes?.[questIndex] || "",
+    nextLabel: `⬇ Descend — Quest ${questIndex + 2}/${campaign.quests.length}`,
+    items: ARMORY,
+    getHeroes: () => players.map((p) => {
+      const kit = loadSave()?.heroes?.[p.heroId] || {};
+      return {
+        id: p.heroId, player: p.name,
+        gold: kit.gold || 0,
+        owned: (kit.equipment || []).map((e) => e.id),
+        potions: kit.potions || [],
+      };
+    }),
+    onBuy: (heroId, itemId) => {
+      const save = loadSave();
+      const kit = save?.heroes?.[heroId];
+      const item = ARMORY.find((i) => i.id === itemId);
+      if (!save || !kit || !item) return "The armorer shrugs — cannot sell that.";
+      if (kit.gold < item.cost) return "Not enough gold.";
+      if (!item.consumable && (kit.equipment || []).some((e) => e.id === item.id)) return "Already owned.";
+      kit.gold -= item.cost;
+      if (item.consumable) {
+        (kit.potions ||= []).push(item.potion);
+      } else {
+        const { cost, desc, consumable, potion, ...gear } = item;
+        (kit.equipment ||= []).push(gear);
+      }
+      writeSave(save);
+      return null;
+    },
+    onDone: startNextQuest,
+  });
+}
+
+async function startNextQuest() {
+  questIndex++;
+  quest = await loadQuest(questIndex);
+  const players = lobby.players.filter((p) => p.heroId);
+  questVictoryHandled = false;
+  state = createGame(quest, players, Date.now() % 2147483647, carryFromSave());
+  rebuildForNewQuest();
+  broadcastState();
+}
+
+// Καθαρή μετάβαση σε νέο quest: νέο BoardView (ο renderer/canvas του παλιού
+// πετιέται), μηδενισμός καμερο-μνήμης, fx και ui modes.
+function rebuildForNewQuest() {
+  lastTurnKey = null;
+  lastActivePos = null;
+  turnOverHintFor = null;
+  uiMode.selecting = null;
+  uiMode.pendingMove = null;
+  fxQueue.length = 0;
+  pendingRender = null;
+  ui.show(ui.el.game);
+  buildView();
 }
 
 // ---------- FX sequencer: παίζει τα events με σειρά και δραματικές παύσεις ----------
@@ -324,10 +540,21 @@ async function playFxEvent(ev) {
 }
 
 // ---------- Game screen ----------
-async function enterGame() {
-  ui.show(ui.el.game);
+// Το view ξαναχτίζεται σε κάθε quest — loop κίνησης και κουμπιά δένουν ΜΙΑ
+// φορά και μιλούν πάντα στο τρέχον module-level view.
+let gameChromeReady = false;
+function buildView() {
+  view?.dispose();
   view = new BoardView(document.getElementById("board-container"), quest, models);
   view.onTap = onCellTap;
+}
+
+async function enterGame() {
+  ui.show(ui.el.game);
+  buildView();
+  if (gameChromeReady) return;
+  gameChromeReady = true;
+
   ui.el.btnCenter.addEventListener("click", () => {
     const active = state?.heroes[state.turnOrder[state.turnIndex]];
     view.clearUserPan(); // «γύρνα με στη δράση» — η κάμερα ξανακολουθεί
@@ -341,7 +568,7 @@ async function enterGame() {
     requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    view.animate(dt);
+    view?.animate(dt);
   })(clockStart);
 }
 
@@ -366,7 +593,8 @@ function targetCellsFor(s, mode) {
     return Object.values(s.monsters)
       .filter((m) => m.alive && s.revealed[m.area])
       .filter((m) => isAdjacent(hero, m) ||
-        (HEROES[hero.id].trait === "ranged" && lineOfSight(board, s, hero.x, hero.y, m.x, m.y)))
+        (HEROES[hero.id].trait === "ranged" && lineOfSight(board, s, hero.x, hero.y, m.x, m.y)) ||
+        !!thrownWeaponFor(s, board, hero, m)) // Sable Fangs: εμβέλεια 2 + LOS
       .map((m) => key(m.x, m.y));
   }
   if (mode === "disarm") {
@@ -597,7 +825,8 @@ function onCellTap({ x, y }) {
       const canMelee = Math.abs(target.x - hero.x) + Math.abs(target.y - hero.y) === 1;
       const canRanged = HEROES[hero.id].trait === "ranged" && !canMelee &&
         lineOfSight(board, state, hero.x, hero.y, target.x, target.y);
-      if (canMelee || canRanged) { issue("attack", { targetId: target.id }); return; }
+      const canThrow = !canMelee && !canRanged && !!thrownWeaponFor(state, board, hero, target);
+      if (canMelee || canRanged || canThrow) { issue("attack", { targetId: target.id }); return; }
     }
   }
 
@@ -634,7 +863,10 @@ function onCellTap({ x, y }) {
     return;
   }
   if (furn?.type === "stairs" && (!state.turn.moveRoll || state.turn.over)) {
-    ui.toast("The stairway out — once your work below is done.");
+    const escaping = state.quest.objective?.type === "retrieve" && state.objectivePhase === "escape";
+    ui.toast(escaping
+      ? "The way out — bring the relic here to escape!"
+      : "The stairway out — once your work below is done.");
     return;
   }
 
@@ -665,10 +897,12 @@ const monsterAttack = (s, monster, hero, dice) => resolveAttack(s, monster, hero
 
 // ---------- Boot ----------
 (async function boot() {
-  quest = await fetch("data/quest01.json").then((r) => r.json());
+  campaign = await fetch("data/campaign.json").then((r) => r.json());
+  quest = await loadQuest(0);
   models = await loadMinis();
   document.getElementById("loading-note").classList.add("hidden");
   document.getElementById("build-badge").textContent = "build " + BUILD;
+  refreshContinueButton();
   ui.show(ui.el.home);
 })();
 
@@ -676,6 +910,10 @@ const monsterAttack = (s, monster, hero, dice) => resolveAttack(s, monster, hero
 window.__cb = {
   get state() { return state; },
   get view() { return view; },
+  get campaign() { return campaign; },
+  get questIndex() { return questIndex; },
+  // E2E: στείλε εντολή σαν να πατήθηκε από το UI (σεβασμός host/guest ροής)
+  issue: (cmd, args) => issue(cmd, args),
   // Προβολή κελιού σε συντεταγμένες οθόνης — για E2E tests μέσω πραγματικών taps
   cellToScreen(x, y) {
     if (!view) return null;

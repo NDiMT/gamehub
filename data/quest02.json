@@ -1,0 +1,100 @@
+{
+  "id": "quest02",
+  "name": "The Sunken Reliquary",
+  "intro": "Beneath the keep the cisterns have flooded, and the drowned dead walk the waterways. In the old reliquary a relic — the Pale Chalice — keeps the flood from rising further. Fight your way to it, take it, and carry it back to the light.",
+  "objective": {
+    "type": "retrieve",
+    "itemId": "pale_chalice",
+    "text": "Find the Pale Chalice",
+    "escapeText": "Escape with the Pale Chalice — reach the stairs!",
+    "claimBanner": "🏺 The Pale Chalice is found — to the stairs!",
+    "victoryBanner": "🏆 The Pale Chalice sees daylight!",
+    "victoryText": "The Pale Chalice is carried out of the dark. VICTORY!"
+  },
+  "outro": "The flood stills as the Pale Chalice leaves the waterways. Far below, something older stirs on a throne of bone.",
+  "width": 19,
+  "height": 27,
+  "areas": [
+    { "id": "cistern", "type": "room", "rects": [[2, 2, 5, 5]] },
+    { "id": "reliquary", "type": "room", "rects": [[13, 2, 4, 5]] },
+    { "id": "drownedhall", "type": "room", "rects": [[6, 9, 7, 4]] },
+    { "id": "sluice", "type": "room", "rects": [[2, 16, 5, 4]] },
+    { "id": "mosspool", "type": "room", "rects": [[12, 16, 5, 4]] },
+    { "id": "wellhead", "type": "room", "rects": [[7, 22, 5, 4]] },
+    { "id": "gully_w", "type": "corridor", "rects": [[4, 8, 1, 6]] },
+    { "id": "gully_e", "type": "corridor", "rects": [[14, 8, 1, 6]] },
+    { "id": "crosslow", "type": "corridor", "rects": [[4, 14, 11, 1]] },
+    { "id": "channel", "type": "corridor", "rects": [[9, 14, 1, 7]] }
+  ],
+  "doors": [
+    { "id": "d_well", "cell": [9, 21], "between": ["wellhead", "channel"] },
+    { "id": "d_hall", "cell": [9, 13], "between": ["drownedhall", "channel"] },
+    { "id": "d_hallw", "cell": [5, 10], "between": ["drownedhall", "gully_w"] },
+    { "id": "d_halle", "cell": [13, 10], "between": ["drownedhall", "gully_e"] },
+    { "id": "d_cistern", "cell": [4, 7], "between": ["cistern", "gully_w"] },
+    { "id": "d_reliq", "cell": [14, 7], "between": ["reliquary", "gully_e"] },
+    { "id": "d_sluice", "cell": [4, 15], "between": ["sluice", "crosslow"] },
+    { "id": "d_moss", "cell": [14, 15], "between": ["mosspool", "crosslow"], "secret": true }
+  ],
+  "start": { "area": "wellhead", "stairs": [9, 24] },
+  "monsters": [
+    { "id": "dk1", "type": "dreadknight", "cell": [14, 3], "area": "reliquary" },
+    { "id": "dk2", "type": "dreadknight", "cell": [15, 5], "area": "reliquary" },
+    { "id": "a1", "type": "acolyte", "cell": [13, 4], "area": "reliquary" },
+    { "id": "a2", "type": "acolyte", "cell": [3, 3], "area": "cistern" },
+    { "id": "h1", "type": "hollow", "cell": [5, 4], "area": "cistern" },
+    { "id": "g1", "type": "grunt", "cell": [4, 6], "area": "cistern" },
+    { "id": "w1", "type": "wraith", "cell": [8, 10], "area": "drownedhall" },
+    { "id": "h2", "type": "hollow", "cell": [10, 11], "area": "drownedhall" },
+    { "id": "h3", "type": "hollow", "cell": [7, 12], "area": "drownedhall" },
+    { "id": "g2", "type": "grunt", "cell": [10, 9], "area": "drownedhall" },
+    { "id": "g3", "type": "grunt", "cell": [3, 17], "area": "sluice" },
+    { "id": "r1", "type": "rotfang", "cell": [5, 18], "area": "sluice" },
+    { "id": "h4", "type": "hollow", "cell": [2, 19], "area": "sluice" },
+    { "id": "h5", "type": "hollow", "cell": [13, 17], "area": "mosspool" },
+    { "id": "h6", "type": "hollow", "cell": [15, 18], "area": "mosspool" },
+    { "id": "a3", "type": "acolyte", "cell": [14, 16], "area": "mosspool" },
+    { "id": "w2", "type": "wraith", "cell": [4, 9], "area": "gully_w" },
+    { "id": "r2", "type": "rotfang", "cell": [14, 12], "area": "gully_e" },
+    { "id": "w3", "type": "wraith", "cell": [12, 14], "area": "crosslow" },
+    { "id": "r3", "type": "rotfang", "cell": [9, 18], "area": "channel" }
+  ],
+  "furniture": [
+    { "type": "stairs", "cell": [9, 24], "area": "wellhead" },
+    { "type": "barrel", "cell": [7, 25], "area": "wellhead" },
+    { "type": "bones", "cell": [11, 25], "area": "wellhead" },
+    { "type": "altar", "cell": [13, 2], "area": "reliquary" },
+    { "type": "chest", "cell": [16, 2], "area": "reliquary" },
+    { "type": "chest", "cell": [2, 2], "area": "cistern" },
+    { "type": "barrel", "cell": [2, 6], "area": "cistern" },
+    { "type": "pillar", "cell": [7, 9], "area": "drownedhall" },
+    { "type": "pillar", "cell": [11, 9], "area": "drownedhall" },
+    { "type": "bones", "cell": [6, 12], "area": "drownedhall" },
+    { "type": "barrel", "cell": [6, 19], "area": "sluice" },
+    { "type": "bones", "cell": [2, 16], "area": "sluice" },
+    { "type": "barrel", "cell": [16, 19], "area": "mosspool" },
+    { "type": "bones", "cell": [12, 19], "area": "mosspool" }
+  ],
+  "traps": [
+    { "id": "t1", "type": "pit", "cell": [9, 16] },
+    { "id": "t2", "type": "spear", "cell": [9, 19] },
+    { "id": "t3", "type": "pit", "cell": [4, 11] },
+    { "id": "t4", "type": "spear", "cell": [14, 9] },
+    { "id": "t5", "type": "spear", "cell": [7, 14] },
+    { "id": "t6", "type": "chest", "cell": [16, 2], "area": "reliquary" }
+  ],
+  "questTreasures": [
+    {
+      "area": "reliquary",
+      "text": "Behind the altar, cold to the touch: the Pale Chalice! Carry it back to the stairs.",
+      "relic": { "id": "pale_chalice", "name": "Pale Chalice" },
+      "gold": 100
+    },
+    {
+      "area": "cistern",
+      "text": "Under the silt: a drowned courier's satchel — 80 gold.",
+      "gold": 80
+    }
+  ],
+  "wanderingMonster": "wraith"
+}

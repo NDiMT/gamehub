@@ -1,0 +1,113 @@
+{
+  "id": "quest03",
+  "name": "The Undercrown",
+  "intro": "The last stair ends in the Undercrown: a throne-hall of bone where the Warden's masters were crowned in the dark. The dead court is waking, and STONEWRATH has been raised anew to lead it. Purge the Undercrown — leave nothing standing.",
+  "objective": {
+    "type": "slayAll",
+    "text": "Slay every creature in the Undercrown",
+    "victoryBanner": "🏆 The Undercrown falls silent!",
+    "victoryText": "Nothing stirs in the Undercrown. The Shadowkeep is unbound. VICTORY!"
+  },
+  "outro": "The last echo dies among the bone thrones. The long descent is over.",
+  "width": 19,
+  "height": 27,
+  "areas": [
+    { "id": "throne", "type": "room", "rects": [[5, 1, 9, 3]] },
+    { "id": "warrens_w", "type": "room", "rects": [[3, 6, 5, 4]] },
+    { "id": "warrens_e", "type": "room", "rects": [[11, 6, 5, 4]] },
+    { "id": "forge", "type": "room", "rects": [[2, 13, 5, 4]] },
+    { "id": "gallery", "type": "room", "rects": [[12, 13, 5, 4]] },
+    { "id": "boneyard", "type": "room", "rects": [[2, 20, 4, 4]] },
+    { "id": "vault3", "type": "room", "rects": [[13, 20, 4, 3]] },
+    { "id": "descent", "type": "room", "rects": [[7, 23, 5, 3]] },
+    { "id": "crossA", "type": "corridor", "rects": [[3, 11, 13, 1]] },
+    { "id": "crossB", "type": "corridor", "rects": [[3, 18, 13, 1]] },
+    { "id": "spine3", "type": "corridor", "rects": [[9, 5, 1, 17]] }
+  ],
+  "doors": [
+    { "id": "d_descent", "cell": [9, 22], "between": ["descent", "spine3"] },
+    { "id": "d_throne", "cell": [9, 4], "between": ["throne", "spine3"] },
+    { "id": "d_ww", "cell": [8, 7], "between": ["warrens_w", "spine3"] },
+    { "id": "d_we", "cell": [10, 7], "between": ["warrens_e", "spine3"] },
+    { "id": "d_ww2", "cell": [5, 10], "between": ["warrens_w", "crossA"] },
+    { "id": "d_we2", "cell": [13, 10], "between": ["warrens_e", "crossA"] },
+    { "id": "d_forge", "cell": [4, 12], "between": ["forge", "crossA"] },
+    { "id": "d_gallery", "cell": [14, 12], "between": ["gallery", "crossA"] },
+    { "id": "d_forge2", "cell": [4, 17], "between": ["forge", "crossB"] },
+    { "id": "d_gallery2", "cell": [14, 17], "between": ["gallery", "crossB"] },
+    { "id": "d_boneyard", "cell": [3, 19], "between": ["boneyard", "crossB"] },
+    { "id": "d_vault", "cell": [15, 19], "between": ["vault3", "crossB"], "secret": true }
+  ],
+  "start": { "area": "descent", "stairs": [9, 24] },
+  "monsters": [
+    { "id": "boss1", "type": "stonewrath", "cell": [9, 2], "area": "throne" },
+    { "id": "dk1", "type": "dreadknight", "cell": [7, 2], "area": "throne" },
+    { "id": "dk2", "type": "dreadknight", "cell": [11, 2], "area": "throne" },
+    { "id": "dk3", "type": "dreadknight", "cell": [13, 3], "area": "throne" },
+    { "id": "a1", "type": "acolyte", "cell": [6, 3], "area": "throne" },
+    { "id": "a2", "type": "acolyte", "cell": [12, 1], "area": "throne" },
+    { "id": "a3", "type": "acolyte", "cell": [4, 7], "area": "warrens_w" },
+    { "id": "h1", "type": "hollow", "cell": [6, 8], "area": "warrens_w" },
+    { "id": "g1", "type": "grunt", "cell": [3, 9], "area": "warrens_w" },
+    { "id": "h2", "type": "hollow", "cell": [5, 6], "area": "warrens_w" },
+    { "id": "a4", "type": "acolyte", "cell": [14, 7], "area": "warrens_e" },
+    { "id": "h3", "type": "hollow", "cell": [12, 8], "area": "warrens_e" },
+    { "id": "g2", "type": "grunt", "cell": [15, 9], "area": "warrens_e" },
+    { "id": "h4", "type": "hollow", "cell": [13, 6], "area": "warrens_e" },
+    { "id": "dk4", "type": "dreadknight", "cell": [4, 14], "area": "forge" },
+    { "id": "g3", "type": "grunt", "cell": [2, 15], "area": "forge" },
+    { "id": "a5", "type": "acolyte", "cell": [5, 16], "area": "forge" },
+    { "id": "a6", "type": "acolyte", "cell": [13, 14], "area": "gallery" },
+    { "id": "w1", "type": "wraith", "cell": [15, 15], "area": "gallery" },
+    { "id": "h5", "type": "hollow", "cell": [12, 16], "area": "gallery" },
+    { "id": "h6", "type": "hollow", "cell": [3, 21], "area": "boneyard" },
+    { "id": "h7", "type": "hollow", "cell": [4, 22], "area": "boneyard" },
+    { "id": "r1", "type": "rotfang", "cell": [2, 23], "area": "boneyard" },
+    { "id": "dk5", "type": "dreadknight", "cell": [11, 18], "area": "crossB" },
+    { "id": "r2", "type": "rotfang", "cell": [9, 8], "area": "spine3" },
+    { "id": "w2", "type": "wraith", "cell": [9, 15], "area": "spine3" },
+    { "id": "r3", "type": "rotfang", "cell": [9, 20], "area": "spine3" },
+    { "id": "w3", "type": "wraith", "cell": [5, 11], "area": "crossA" },
+    { "id": "w4", "type": "wraith", "cell": [7, 18], "area": "crossB" }
+  ],
+  "furniture": [
+    { "type": "stairs", "cell": [9, 24], "area": "descent" },
+    { "type": "barrel", "cell": [7, 25], "area": "descent" },
+    { "type": "bones", "cell": [11, 23], "area": "descent" },
+    { "type": "pillar", "cell": [5, 1], "area": "throne" },
+    { "type": "pillar", "cell": [13, 1], "area": "throne" },
+    { "type": "altar", "cell": [9, 1], "area": "throne" },
+    { "type": "bones", "cell": [3, 6], "area": "warrens_w" },
+    { "type": "barrel", "cell": [15, 6], "area": "warrens_e" },
+    { "type": "barrel", "cell": [2, 13], "area": "forge" },
+    { "type": "bones", "cell": [6, 16], "area": "forge" },
+    { "type": "bookshelf", "cell": [16, 13], "area": "gallery" },
+    { "type": "bookshelf", "cell": [16, 16], "area": "gallery" },
+    { "type": "sarcophagus", "cell": [2, 20], "area": "boneyard" },
+    { "type": "bones", "cell": [5, 23], "area": "boneyard" },
+    { "type": "chest", "cell": [16, 20], "area": "vault3" }
+  ],
+  "traps": [
+    { "id": "t1", "type": "pit", "cell": [9, 6] },
+    { "id": "t2", "type": "spear", "cell": [9, 12] },
+    { "id": "t3", "type": "pit", "cell": [9, 19] },
+    { "id": "t4", "type": "spear", "cell": [7, 11] },
+    { "id": "t5", "type": "pit", "cell": [12, 18] },
+    { "id": "t6", "type": "spear", "cell": [4, 15] },
+    { "id": "t7", "type": "chest", "cell": [16, 20], "area": "vault3" }
+  ],
+  "questTreasures": [
+    {
+      "area": "vault3",
+      "text": "In the chest: a Crown Shard humming with old power (+1 attack die) — and 150 gold besides.",
+      "artifact": { "id": "crown_shard", "name": "Crown Shard", "attackBonus": 1 },
+      "gold": 150
+    },
+    {
+      "area": "gallery",
+      "text": "A tithe-box hidden behind the shelves: 90 gold.",
+      "gold": 90
+    }
+  ],
+  "wanderingMonster": "dreadknight"
+}

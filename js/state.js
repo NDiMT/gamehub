@@ -24,8 +24,10 @@ export const rollDie = (rng) => 1 + Math.floor(rng() * 6);
 export const rollCombat = (rng, count) =>
   Array.from({ length: count }, () => DIE_FACES[Math.floor(rng() * 6)]);
 
-export function createGame(quest, players, seed) {
+export function createGame(quest, players, seed, carry = {}) {
   // players: [{ seat, name, heroId }]
+  // carry: μόνιμο «σακίδιο» καμπάνιας ανά heroId — {gold, potions, artifacts,
+  // equipment}. Σώμα/ξόρκια/στάτους ξεκινούν πάντα φρέσκα σε κάθε quest.
   const board = buildBoard(quest);
   const startArea = quest.start.area;
   const startCells = cellsOfArea(board, startArea)
@@ -35,11 +37,16 @@ export function createGame(quest, players, seed) {
   players.forEach((p, i) => {
     const def = HEROES[p.heroId];
     const [x, y] = startCells[i];
+    const kit = carry[p.heroId] || {};
     heroes[p.heroId] = {
       id: p.heroId, seat: p.seat, playerName: p.name,
       x, y, body: def.body, maxBody: def.body, mind: def.mind,
       attack: def.attack, defense: def.defense,
-      alive: true, gold: 0, potions: [], artifacts: [],
+      alive: true,
+      gold: kit.gold || 0,
+      potions: [...(kit.potions || [])],
+      artifacts: [...(kit.artifacts || [])],
+      equipment: [...(kit.equipment || [])], // αγορές από το Armory
       spells: [], // γεμίζει στο draft σχολών παρακάτω (αν υπάρχει mystic)
       searchedTreasure: [], strBonus: 0, inPit: false,
       defBonus: 0,       // Granite Shell: +ζάρια άμυνας μέχρι να φάει ζημιά
@@ -170,15 +177,51 @@ function damageMonster(s, monster, amount) {
     monster.alive = false;
     pushFx(s, { t: "banner", text: `💀 ${def.name} is destroyed!`, ms: 1300 });
     pushLog(s, `💀 ${def.name} is destroyed!`, "kill");
-    const obj = s.quest.objective;
-    if (obj.type === "killBoss" && monster.id === obj.target) {
-      s.phase = "victory";
-      pushFx(s, { t: "banner", text: "🏆 STONEWRATH crumbles to rubble!", ms: 2000 });
-      pushLog(s, "STONEWRATH crumbles to rubble. VICTORY!", "end");
-    }
+    checkKillObjectives(s, monster);
   } else {
     pushLog(s, `${def.name} loses ${amount} Body.`, "damage");
   }
+}
+
+// ---------- Στόχοι quest ----------
+// killBoss: πέθανε ο στόχος. slayAll: δεν απομένει ζωντανό τέρας (μετράνε και
+// τα wandering). retrieve: πάρε το κειμήλιο (searchTreasure) και μετά ο
+// ΚΑΤΟΧΟΣ του να πατήσει στα σκαλιά — αρκεί αυτός, όχι όλη η ομάδα (γρήγορο
+// και ξεκάθαρο φινάλε στο κινητό, οι υπόλοιποι «τον καλύπτουν»).
+function winQuest(s) {
+  const obj = s.quest.objective;
+  s.phase = "victory";
+  pushFx(s, { t: "banner", text: obj.victoryBanner || "🏆 The quest is complete!", ms: 2000 });
+  pushLog(s, obj.victoryText || "The quest is complete. VICTORY!", "end");
+}
+
+function checkKillObjectives(s, monster) {
+  if (s.phase !== "playing") return;
+  const obj = s.quest.objective;
+  if (obj.type === "killBoss" && monster.id === obj.target) winQuest(s);
+  else if (obj.type === "slayAll" && !Object.values(s.monsters).some((m) => m.alive)) winQuest(s);
+}
+
+// Φάση διαφυγής ενεργή; (retrieve: το κειμήλιο βρέθηκε, μένει η έξοδος)
+export function escapeActive(s) {
+  return s.quest.objective?.type === "retrieve" && s.objectivePhase === "escape" && s.phase === "playing";
+}
+
+// Ο ήρωας πάτησε στα σκαλιά κουβαλώντας το κειμήλιο; → νίκη
+function checkEscape(s, hero) {
+  if (!escapeActive(s)) return false;
+  const [sx, sy] = s.quest.start.stairs;
+  if (hero.x !== sx || hero.y !== sy) return false;
+  if (!hero.artifacts.some((a) => a.id === s.quest.objective.itemId)) return false;
+  winQuest(s);
+  return true;
+}
+
+// Σύνολο bonus από artifacts + εξοπλισμό Armory — ΜΙΑ πηγή αλήθειας για
+// ζάρια επίθεσης/άμυνας/κίνησης (τη διαβάζει και το HUD).
+export function gearBonus(hero, field) {
+  const sum = (list) => (list || []).reduce((n, it) => n + (it[field] || 0), 0);
+  return sum(hero.artifacts) + sum(hero.equipment);
 }
 
 function triggerTrap(s, board, hero, trapDef) {
@@ -233,7 +276,7 @@ export function resolveAttack(s, attacker, defender, attackDice, attackerIsMonst
 
   const defenderIsHero = !attackerIsMonster ? false : true;
   const defDice = defenderIsHero
-    ? defender.defense + (defender.artifacts?.reduce((n, a) => n + (a.defenseBonus || 0), 0) || 0)
+    ? defender.defense + gearBonus(defender, "defenseBonus")
       + (defender.defBonus || 0) - (defender.inPit ? 1 : 0)
     : MONSTERS[defender.type].defense;
   const def = rollCombat(r, Math.max(1, defDice));
@@ -262,6 +305,17 @@ export function resolveAttack(s, attacker, defender, attackDice, attackerIsMonst
     } else damageMonster(s, defender, damage);
   }
   return damage;
+}
+
+// Εκτοξευόμενο όπλο (π.χ. Sable Fangs) που ΦΤΑΝΕΙ τον στόχο: εντός εμβέλειας
+// (manhattan) και με οπτική επαφή. ΜΙΑ πηγή αλήθειας — τη διαβάζει και το UI.
+export function thrownWeaponFor(s, board, hero, target) {
+  const item = (hero.equipment || []).find((e) => e.thrownRange);
+  if (!item) return null;
+  const d = Math.abs(hero.x - target.x) + Math.abs(hero.y - target.y);
+  if (d > item.thrownRange) return null;
+  if (!lineOfSight(board, s, hero.x, hero.y, target.x, target.y)) return null;
+  return item;
 }
 
 // Έγκυρα κελιά για Riftstride: ελεύθερο κελί περιοχής σε ακτίνα range,
@@ -293,8 +347,8 @@ export const commands = {
     const hero = activeHero(s);
     if (!hero.alive || s.turn.moveRoll) return false;
     const r = rng(s);
-    // Galestep δίνει +1 ζάρι, το Wail of the Warden κόβει 1 (min 1)
-    let count = RULES.movementDice + (hero.extraMoveDice || 0);
+    // Galestep/μπότες δίνουν +ζάρια, το Wail of the Warden κόβει 1 (min 1)
+    let count = RULES.movementDice + (hero.extraMoveDice || 0) + gearBonus(hero, "moveDice");
     if (hero.shaken) count = Math.max(1, count - 1);
     const dice = Array.from({ length: count }, () => rollDie(r));
     if (hero.shaken) {
@@ -353,6 +407,17 @@ export const commands = {
           if (s.turn.over) break;
         }
       }
+
+      // Διαφυγή (retrieve): ο κάτοχος του κειμηλίου πάτησε στα σκαλιά → νίκη.
+      // Πρώτα flush το βάδισμα, ώστε το banner νίκης να παίξει ΜΕΤΑ το βήμα.
+      if (s.phase === "playing" && escapeActive(s) &&
+          x === s.quest.start.stairs[0] && y === s.quest.start.stairs[1]) {
+        if (walked.length) {
+          pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked.slice() });
+          walked.length = 0;
+        }
+        if (checkEscape(s, hero)) break;
+      }
       if (s.phase !== "playing") break;
     }
     if (walked.length) pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked });
@@ -368,10 +433,16 @@ export const commands = {
     const adjacent = isAdjacent(hero, target);
     const canRanged = HEROES[hero.id].trait === "ranged" && !adjacent &&
       lineOfSight(board, s, hero.x, hero.y, target.x, target.y);
-    if (!adjacent && !canRanged) return false;
+    // Sable Fangs: μη-τοξότες χτυπούν από απόσταση με τα ζάρια του αντικειμένου
+    const thrown = !adjacent && !canRanged ? thrownWeaponFor(s, board, hero, target) : null;
+    if (!adjacent && !canRanged && !thrown) return false;
 
-    let dice = hero.attack + hero.strBonus - (hero.inPit ? 1 : 0);
+    // Ριξιά: σταθερά ζάρια του όπλου (χωρίς blade bonus) + τυχόν strBonus.
+    // Σώμα-με-σώμα/τόξο: βασική επίθεση + gear attackBonus.
+    let dice = (thrown ? thrown.thrownDice : hero.attack + gearBonus(hero, "attackBonus"))
+      + hero.strBonus - (hero.inPit ? 1 : 0);
     hero.strBonus = 0;
+    if (thrown) pushLog(s, `🔪 ${HEROES[hero.id].name} hurls ${thrown.name} across the gap!`, "combat");
     resolveAttack(s, hero, target, Math.max(1, dice), false);
     s.turn.actionUsed = true;
     return true;
@@ -473,6 +544,7 @@ export const commands = {
         pushFx(s, { t: "banner", text: `🌀 ${HEROES[hero.id].name} strides through the rift!`, ms: 1300 });
         pushFx(s, { t: "move", key: `hero_${hero.id}`, path: [[bx, by]] });
         pushLog(s, `🌀 ${HEROES[hero.id].name} reappears in a rush of cold air.`, "spell");
+        checkEscape(s, hero); // Riftstride κατευθείαν στα σκαλιά με το κειμήλιο
         break;
       }
 
@@ -555,6 +627,16 @@ export const commands = {
       if (special.artifact) hero.artifacts.push(special.artifact);
       pushLog(s, `🎁 ${special.text}`, "treasure");
       pushFx(s, { t: "card", text: special.text, kind: "special" });
+      // Κειμήλιο στόχου (retrieve): ο ήρωας το κουβαλά — αρχίζει η διαφυγή
+      if (special.relic) {
+        hero.artifacts.push({ ...special.relic, relic: true });
+        s.objectivePhase = "escape";
+        pushFx(s, {
+          t: "banner", ms: 2200,
+          text: s.quest.objective.claimBanner || `🏺 The ${special.relic.name} is found — to the stairs!`,
+        });
+        pushLog(s, `🏺 ${HEROES[hero.id].name} now carries the ${special.relic.name}. Reach the stairs!`, "end");
+      }
       return true;
     }
 

@@ -35,6 +35,7 @@
     <p id="loading-note" class="dim">Unpacking the miniatures...</p>
     <div class="home-form">
       <input id="player-name" type="text" maxlength="14" placeholder="Your name" autocomplete="off" />
+      <button id="btn-continue" class="primary hidden">⤵ Continue campaign</button>
       <button id="btn-host" class="primary"><img class="btn-px" src="assets/icons/px/host.png" alt="" onerror="this.remove()" /> Host a game</button>
       <div class="join-row">
         <input id="join-code" type="text" maxlength="4" placeholder="CODE" autocomplete="off" />
@@ -79,6 +80,15 @@
     <p id="end-text"></p>
     <div id="end-stats"></div>
     <button id="btn-again" class="primary">↺ Play again</button>
+  </div>
+
+  <!-- Armory (μεταξύ των quests της καμπάνιας — ο host ψωνίζει για όλους) -->
+  <div id="screen-armory" class="screen parchment-bg hidden">
+    <h2 class="lobby-title">⚒ The Wayfarers' Armory</h2>
+    <p id="armory-interlude"></p>
+    <div id="armory-tabs"></div>
+    <div id="armory-items"></div>
+    <button id="btn-descend" class="primary">⬇ Descend</button>
   </div>
 
   <div id="toast" class="hidden"></div>

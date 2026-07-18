@@ -122,6 +122,32 @@ export const DREAD_SPELLS = {
   },
 };
 
+// Το Πανοπλοστάσιο των Οδοιπόρων — μαγαζί ανάμεσα στα quests της καμπάνιας.
+// Τα μπόνους εφαρμόζονται όπως των artifacts (gearBonus στο state.js):
+//   attackBonus/defenseBonus = +ζάρια μάχης, moveDice = +ζάρι κίνησης,
+//   thrownRange/thrownDice = επίθεση εξ αποστάσεως για μη-τοξότες.
+// Το toolkit ΠΩΛΕΙΤΑΙ/αποθηκεύεται εδώ ως equipment {id:"toolkit"} —
+// η χρήση του (disarm για κάθε ήρωα) υλοποιείται σε επόμενο βήμα.
+// consumable: μπαίνει στα potions του ήρωα, αγοράζεται πολλές φορές.
+export const ARMORY = [
+  { id: "keenwhet", name: "Keenwhet Blade", icon: "🗡", cost: 250, attackBonus: 1,
+    desc: "Crypt-steel honed to a whisper. +1 attack die." },
+  { id: "gravewall", name: "Gravewall Shield", icon: "🛡", cost: 180, defenseBonus: 1,
+    desc: "A slab of warded iron. +1 defense die." },
+  { id: "wardhelm", name: "Wardplate Helm", icon: "🪖", cost: 140, defenseBonus: 1,
+    desc: "A visored helm etched with warding sigils. +1 defense die — stacks with a shield." },
+  { id: "longstriders", name: "Longstrider Boots", icon: "🥾", cost: 200, moveDice: 1,
+    desc: "Boots that eat the miles. +1 movement die every turn." },
+  { id: "sablefangs", name: "Sable Fangs", icon: "🔪", cost: 120, thrownRange: 2, thrownDice: 2,
+    desc: "Balanced throwing irons: attack a foe up to 2 squares away with 2 dice." },
+  { id: "toolkit", name: "Sapper's Satchel", icon: "🧰", cost: 130,
+    desc: "Picks, shims and steady hands — trap-disarming tools for any hero." },
+  { id: "draught", name: "Healing Draught", icon: "🧪", cost: 60, consumable: true, potion: "heal2",
+    desc: "Restores 2 Body. Drink on your turn. Buy as many as you can carry." },
+  { id: "wrathroot", name: "Wrathroot Tonic", icon: "⚗️", cost: 50, consumable: true, potion: "str1",
+    desc: "+1 attack die on your next attack. Buy as many as you can carry." },
+];
+
 export const MONSTERS = {
   grunt: { id: "grunt", name: "Grunt", move: 10, attack: 2, defense: 1, body: 1, color: 0x5a8f3c },
   hollow: { id: "hollow", name: "Hollow", move: 6, attack: 2, defense: 2, body: 1, color: 0xb8b8a8 },

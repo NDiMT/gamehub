@@ -5,8 +5,11 @@
   "objective": {
     "type": "killBoss",
     "target": "boss1",
-    "text": "Slay STONEWRATH"
+    "text": "Slay STONEWRATH",
+    "victoryBanner": "🏆 STONEWRATH crumbles to rubble!",
+    "victoryText": "STONEWRATH crumbles to rubble. VICTORY!"
   },
+  "outro": "STONEWRATH has fallen and the upper halls grow silent... but water drips somewhere below.",
   "width": 19,
   "height": 27,
   "areas": [

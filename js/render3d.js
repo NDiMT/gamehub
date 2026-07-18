@@ -19,6 +19,22 @@ const ROOM_TINTS = {
   boss:   { light: 0xa89a8a, dark: 0x978979 },   // σκοτεινή γη
   barracks: { light: 0xc8bb9e, dark: 0xb7aa8d }, // παλιό δέρμα
   store:    { light: 0xbfb59a, dark: 0xaea489 }, // ώχρα αποθήκης
+  // quest02 — The Sunken Reliquary (πλημμυρισμένες στέρνες)
+  wellhead:    { light: 0xcdbfa8, dark: 0xbcae97 }, // ζεστό αμμόχρωμα εισόδου
+  cistern:     { light: 0x9fb4be, dark: 0x8ea3ad }, // βαθύ υγρό γαλάζιο
+  reliquary:   { light: 0xc8c2d4, dark: 0xb7b1c3 }, // χλωμό ιερό μωβ
+  drownedhall: { light: 0xa8bcb4, dark: 0x97aba3 }, // σταχτί νερό
+  sluice:      { light: 0xa9bd9e, dark: 0x98ac8d }, // γλίτσα/βρύο
+  mosspool:    { light: 0x9cbfa6, dark: 0x8bae95 }, // πράσινη λιμνούλα
+  // quest03 — The Undercrown (αίθουσες από κόκαλο και σκουριά)
+  descent:   { light: 0xcdbfa8, dark: 0xbcae97 },   // ζεστό αμμόχρωμα εισόδου
+  throne:    { light: 0xb3a17c, dark: 0xa2906b },   // θαμπό χρυσάφι θρόνου
+  warrens_w: { light: 0xc2bcae, dark: 0xb1ab9d },   // ξασπρισμένο κόκαλο
+  warrens_e: { light: 0xc2bcae, dark: 0xb1ab9d },
+  forge:     { light: 0xc2a08e, dark: 0xb18f7d },   // σκουριά σφυρηλατείου
+  gallery:   { light: 0xbaa8c2, dark: 0xa997b1 },   // μωβ σκόνη βιβλιοθήκης
+  boneyard:  { light: 0xafb8a6, dark: 0x9ea795 },   // χλωμό οστεοφυλάκιο
+  vault3:    { light: 0xcfc194, dark: 0xbeb083 },   // κρυφός χρυσός θάλαμος
 };
 const COLORS = {
   room: 0xcdbfa8, roomDark: 0xbcae97,
@@ -273,7 +289,16 @@ export class BoardView {
     addEventListener("resize", () => this.resize(container));
   }
 
+  // Αλλαγή quest στην καμπάνια: πέτα renderer/canvas — νέο BoardView θα χτιστεί.
+  // Ο παλιός resize listener μένει στο window αλλά αδρανοποιείται από το guard.
+  dispose() {
+    this._disposed = true;
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+  }
+
   resize(container) {
+    if (this._disposed) return;
     const w = container.clientWidth || innerWidth;
     const h = container.clientHeight || innerHeight;
     this.camera.aspect = w / h;
@@ -619,10 +644,18 @@ export class BoardView {
 
     // Έπιπλα: ορατά σε αποκαλυμμένες περιοχές· τα σεντούκια λάμπουν όταν ανοίγουν
     const activeHero = state.heroes[state.turnOrder[state.turnIndex]];
+    // Retrieve objective σε φάση διαφυγής: τα σκαλιά-έξοδος παλλόμενα
+    const escaping = state.quest.objective?.type === "retrieve" &&
+      state.objectivePhase === "escape" && state.phase === "playing";
     for (const [id, mesh] of this.pieces) {
       if (!mesh.userData.isFurniture) continue;
       mesh.visible = !!state.revealed[mesh.userData.areaId];
-      if (mesh.userData.kind === "chest" && activeHero?.alive) {
+      if (mesh.userData.kind === "stairs") {
+        // Ίδιο pattern με το chest glow, αλλά μόνο παλμός κλίμακας —
+        // σκαλιά που χοροπηδάνε θα έδειχναν σπασμένα.
+        mesh.userData.glowing = mesh.visible && escaping;
+        mesh.userData.glowPulseOnly = true;
+      } else if (mesh.userData.kind === "chest" && activeHero?.alive) {
         const area = mesh.userData.areaId;
         const heroHere = areaAt(this.board, activeHero.x, activeHero.y) === area;
         const monstersHere = Object.values(state.monsters)
@@ -806,6 +839,7 @@ export class BoardView {
 
   // Κλήση σε κάθε frame: ολίσθηση μινιατούρων, φλόγες, φανάρι
   animate(dt) {
+    if (this._disposed) return;
     const frameStart = performance.now();
     this.time += dt;
     if (this.destMarker?.visible) {
@@ -940,7 +974,8 @@ export class BoardView {
       } else if (mesh.userData.glowing) {
         const pulse = 1 + Math.sin(this.time * 5) * 0.07;
         mesh.scale.setScalar(pulse);
-        mesh.position.y = Math.abs(Math.sin(this.time * 5)) * 0.06;
+        // glowPulseOnly (σκαλιά): μόνο παλμός, χωρίς αναπήδηση
+        mesh.position.y = mesh.userData.glowPulseOnly ? 0 : Math.abs(Math.sin(this.time * 5)) * 0.06;
       } else if (mesh.scale.x !== 1) {
         mesh.scale.setScalar(1);
         mesh.position.y = 0;

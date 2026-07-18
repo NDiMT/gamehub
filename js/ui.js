@@ -1,15 +1,17 @@
-// DOM UI layer: lobby, HUD, action bar, dice tray, cards, pickers.
-// No game rules live here.
+// DOM UI layer: lobby, HUD, action bar, dice tray, cards, pickers, armory.
+// No game rules live here (το gearBonus είναι μόνο για προβολή στο HUD).
 import { HEROES, MONSTERS, SPELLS, SPELL_GROUPS } from "./config.js";
+import { gearBonus } from "./state.js";
 
 const $ = (id) => document.getElementById(id);
 
 export function createUI() {
   const el = {
     home: $("screen-home"), lobby: $("screen-lobby"), game: $("screen-game"),
-    end: $("screen-end"),
+    end: $("screen-end"), armory: $("screen-armory"),
     nameInput: $("player-name"), codeInput: $("join-code"),
     btnHost: $("btn-host"), btnJoin: $("btn-join"), btnSolo: $("btn-solo"),
+    btnContinue: $("btn-continue"),
     lobbyCode: $("lobby-code"), lobbySlots: $("lobby-slots"), btnStart: $("btn-start"),
     lobbyHint: $("lobby-hint"),
     turnBar: $("turn-bar"), heroCard: $("hero-card"), actionBar: $("action-bar"),
@@ -18,11 +20,13 @@ export function createUI() {
     btnCenter: $("btn-center"), objective: $("objective-chip"),
     endTitle: $("end-title"), endText: $("end-text"), endStats: $("end-stats"),
     btnAgain: $("btn-again"),
+    armoryInterlude: $("armory-interlude"), armoryTabs: $("armory-tabs"),
+    armoryItems: $("armory-items"), btnDescend: $("btn-descend"),
     toast: $("toast"), homeError: $("home-error"),
   };
 
   function show(screen) {
-    for (const s of [el.home, el.lobby, el.game, el.end]) s.classList.add("hidden");
+    for (const s of [el.home, el.lobby, el.game, el.end, el.armory]) s.classList.add("hidden");
     screen.classList.remove("hidden");
   }
 
@@ -70,7 +74,10 @@ export function createUI() {
     el.turnBar.innerHTML = `<span class="round-chip">ROUND ${state.round}</span> ` +
       `${HEROES[heroId].name}${mine ? " — <b>YOUR TURN</b>" : ` <span class="dim">(${hero.playerName})</span>`}`;
     el.turnBar.classList.toggle("my-turn", mine);
-    el.objective.textContent = "🎯 " + state.quest.objective.text;
+    // Δυναμικός στόχος: στο retrieve η φάση διαφυγής αλλάζει το κείμενο
+    const obj = state.quest.objective;
+    const escaping = obj.type === "retrieve" && state.objectivePhase === "escape";
+    el.objective.textContent = "🎯 " + (escaping ? (obj.escapeText || "Escape — reach the stairs!") : obj.text);
   }
 
   let bannerShownFor = null;
@@ -93,7 +100,10 @@ export function createUI() {
     const mine = Object.values(state.heroes).find((h) => h.seat === mySeat);
     if (!mine) { el.heroCard.innerHTML = ""; return; }
     const def = HEROES[mine.id];
-    const shield = mine.defense + (mine.artifacts?.reduce((n, a) => n + (a.defenseBonus || 0), 0) || 0);
+    // Artifacts + αγορές Armory μετρούν στα εμφανιζόμενα ζάρια
+    const shield = mine.defense + gearBonus(mine, "defenseBonus");
+    const attack = mine.attack + gearBonus(mine, "attackBonus");
+    const gear = (mine.equipment || []).map((e) => e.icon || "").join("");
     const potions = mine.potions.map((p) => p === "heal2" ? "🧪Heal" : "🧪Fury").join(" ") || "";
     // Chips κατάστασης: παγίδες, buffs ξορκιών, dread debuffs — ό,τι αλλάζει ζάρια
     const status = `${mine.inPit ? " · 🕳in pit" : ""}` +
@@ -101,10 +111,11 @@ export function createUI() {
       `${mine.defBonus ? ` · 🪨+${mine.defBonus} shell` : ""}` +
       `${mine.veiled ? " · 🌫veiled" : ""}` +
       `${mine.shaken ? " · 😱shaken" : ""}` +
-      `${mine.extraMoveDice ? " · 💨swift" : ""}`;
+      `${mine.extraMoveDice ? " · 💨swift" : ""}` +
+      `${mine.artifacts?.some((a) => a.relic) ? " · 🏺relic" : ""}`;
     el.heroCard.innerHTML = `
       <b>${def.name}</b> <span class="hearts">${"❤".repeat(mine.body)}<span class="dim">${"♡".repeat(Math.max(0, mine.maxBody - mine.body))}</span></span><br>
-      <small>⚔${mine.attack} 🛡${shield} · 💰${mine.gold}${potions ? " · " + potions : ""}${status}${mine.alive ? "" : " · ☠ DOWN"}</small>`;
+      <small>⚔${attack} 🛡${shield} · 💰${mine.gold}${gear ? " · " + gear : ""}${potions ? " · " + potions : ""}${status}${mine.alive ? "" : " · ☠ DOWN"}</small>`;
   }
 
   // ---------- Action bar: μόνο εικονίδια, χωρίς scroll ----------
@@ -235,24 +246,85 @@ export function createUI() {
   function hideSheet() { el.sheet.classList.add("hidden"); }
 
   // ---------- End screen ----------
-  function showEnd(state) {
+  // opts (όλα προαιρετικά — τα ορίζει η ροή καμπάνιας στο main.js):
+  //   title/text: υπερισχύουν των defaults
+  //   extraStats: HTML που μπαίνει κάτω από τους ήρωες (στατιστικά καμπάνιας)
+  //   buttonLabel/onButton: το κύριο κουμπί (Armory / Play again / Rest)
+  //   hideButton: guests που περιμένουν τον host στο Armory
+  function showEnd(state, opts = {}) {
     show(el.end);
     const win = state.phase === "victory";
-    el.endTitle.textContent = win ? "VICTORY" : "DEFEAT";
+    el.endTitle.textContent = opts.title || (win ? "VICTORY" : "DEFEAT");
     el.endTitle.className = win ? "win" : "loss";
-    el.endText.textContent = win
-      ? "STONEWRATH has fallen. The Shadowkeep grows silent... for now."
-      : "The crypt keeps its heroes.";
+    el.endText.textContent = opts.text ||
+      (win ? (state.quest.outro || "The quest is won.") : "The crypt keeps its heroes.");
     el.endStats.innerHTML = Object.values(state.heroes).map((h) => {
       const def = HEROES[h.id];
+      const gear = (h.equipment || []).map((e) => e.icon || "").join("");
       return `<div class="end-hero">${h.alive ? "🏅" : "☠"} <b>${def.name}</b>
-        <span class="dim">${h.playerName}</span> — 💰${h.gold}</div>`;
-    }).join("");
+        <span class="dim">${h.playerName}</span> — 💰${h.gold}${gear ? " " + gear : ""}</div>`;
+    }).join("") + (opts.extraStats || "");
+    el.btnAgain.textContent = opts.buttonLabel || "↺ Play again";
+    el.btnAgain.classList.toggle("hidden", !!opts.hideButton);
+    el.btnAgain.onclick = opts.onButton || (() => location.reload());
+  }
+
+  // ---------- Armory (μεταξύ των quests — μόνο στον host) ----------
+  // Ο host ψωνίζει για ΟΛΟΥΣ τους ήρωες, έναν-έναν σε tabs. ctx:
+  //   interlude: κείμενο-γέφυρα της καμπάνιας
+  //   items: ο κατάλογος (ARMORY από config.js)
+  //   getHeroes(): φρέσκα δεδομένα [{id, player, gold, owned:[ids], potions}]
+  //   onBuy(heroId, itemId): null σε επιτυχία, αλλιώς μήνυμα λάθους
+  //   onDone(): «Descend» — ξεκινά το επόμενο quest
+  function showArmory(ctx) {
+    show(el.armory);
+    el.armoryInterlude.textContent = ctx.interlude || "";
+    el.btnDescend.textContent = ctx.nextLabel || "⬇ Descend";
+    el.btnDescend.onclick = () => {
+      el.btnDescend.disabled = true; // διπλό tap = διπλό createGame — όχι
+      ctx.onDone();
+    };
+    el.btnDescend.disabled = false;
+
+    let sel = ctx.getHeroes()[0]?.id;
+    const render = () => {
+      const heroes = ctx.getHeroes();
+      const hero = heroes.find((h) => h.id === sel) || heroes[0];
+      if (!hero) return;
+      sel = hero.id;
+      el.armoryTabs.innerHTML = heroes.map((h) =>
+        `<button class="armory-tab ${h.id === sel ? "sel" : ""}" data-hero="${h.id}">
+          <b>${HEROES[h.id].name}</b><small>💰${h.gold}${h.potions.length ? ` · 🧪×${h.potions.length}` : ""}</small>
+        </button>`).join("");
+      el.armoryItems.innerHTML = ctx.items.map((it) => {
+        const owned = !it.consumable && hero.owned.includes(it.id);
+        const canBuy = !owned && hero.gold >= it.cost;
+        return `<div class="armory-item ${owned ? "owned" : ""}">
+          <span class="sheet-icon">${it.icon}</span>
+          <span><b>${it.name}</b><small>${it.desc}</small></span>
+          <button class="ai-buy" data-item="${it.id}" ${owned || !canBuy ? "disabled" : ""}>
+            ${owned ? "OWNED" : `💰${it.cost}`}</button>
+        </div>`;
+      }).join("");
+    };
+    el.armoryTabs.onclick = (e) => {
+      const b = e.target.closest("[data-hero]");
+      if (b) { sel = b.dataset.hero; render(); }
+    };
+    el.armoryItems.onclick = (e) => {
+      const b = e.target.closest("[data-item]");
+      if (!b || b.disabled) return;
+      const err = ctx.onBuy(sel, b.dataset.item);
+      if (err) toast(err);
+      else { toast("Purchased!"); render(); }
+    };
+    render();
   }
 
   return {
     el, show, toast, renderLobby, renderTurnBar, renderHeroCard,
     renderActions, renderLog, showBanner, showCard,
     showSpellSheet, showPickerSheet, hideSheet, maybeShowTurnBanner, showEnd,
+    showArmory,
   };
 }
