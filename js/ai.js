@@ -46,6 +46,7 @@ export function runMonsterPhase(s, resolveAttack) {
           const areaNow = board.areaOf[ty * board.width + tx];
           if (areaNow) monster.area = areaNow;
           actions.push({ type: "move", id: monster.id, path });
+          (s.fxMoves ||= []).push({ key: `mob_${monster.id}`, path });
         }
         if (isAdjacent(monster, best.hero)) target = best.hero;
       }

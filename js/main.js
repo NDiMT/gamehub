@@ -146,10 +146,13 @@ function hostApply(seat, cmd, args) {
 // ---------- State διάδοση ----------
 function broadcastState() {
   const snapshot = structuredClone(serializable(state));
-  const fx = { lastDice: state.lastDice, lastRoll: state.lastRoll, lastCard: state.lastCard };
+  const fx = {
+    lastDice: state.lastDice, lastRoll: state.lastRoll,
+    lastCard: state.lastCard, fxMoves: state.fxMoves,
+  };
   if (net?.broadcast) net.broadcast({ type: "state", state: snapshot, ...fx });
   onStateReceived(snapshot, fx);
-  state.lastDice = state.lastRoll = state.lastCard = null;
+  state.lastDice = state.lastRoll = state.lastCard = state.fxMoves = null;
 }
 
 function serializable(s) {
@@ -163,6 +166,7 @@ async function onStateReceived(newState, fx = {}) {
 
   if (!view) await enterGame(); // guest: πρώτο state → μπες στο ταμπλό
   view.sync(renderState);
+  if (fx.fxMoves) for (const m of fx.fxMoves) view.playMove(m.key, m.path);
   ui.renderTurnBar(renderState, mySeat);
   ui.renderHeroCard(renderState, mySeat);
   ui.renderLog(renderState);
@@ -368,6 +372,7 @@ function monsterAttack(s, monster, hero, dice) {
 // Debug/test handle
 window.__cb = {
   get state() { return state; },
+  get view() { return view; },
   tapCell: (x, y) => onCellTap({ x, y }),
   tryAttackAdjacent() {
     if (!state) return false;

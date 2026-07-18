@@ -418,6 +418,16 @@ export class BoardView {
     this.lanternTarget = new THREE.Vector3(x + 0.5, 2.1, y + 0.5);
   }
 
+  // Παίξε κίνηση κελί-κελί: η μινιατούρα χοροπηδάει σε κάθε βήμα του path
+  playMove(entityKey, path) {
+    const piece = this.pieces.get(entityKey);
+    if (!piece || !Array.isArray(path) || !path.length) return;
+    piece.userData.waypoints = path.map(([x, y]) => new THREE.Vector3(x + 0.5, 0, y + 0.5));
+    piece.userData.hopFrom = piece.position.clone();
+    piece.userData.hopFrom.y = 0;
+    piece.userData.hopT = 0;
+  }
+
   setHighlights(cells, color = COLORS.highlight) {
     this.clearHighlights();
     for (const k of cells) {
@@ -439,7 +449,33 @@ export class BoardView {
   // Κλήση σε κάθε frame: ολίσθηση μινιατούρων, φλόγες, φανάρι
   animate(dt) {
     this.time += dt;
+    const HOP_SPEED = 6.5;   // κελιά / δευτερόλεπτο
+    const HOP_HEIGHT = 0.32;
     for (const piece of this.pieces.values()) {
+      const wps = piece.userData.waypoints;
+      if (wps?.length) {
+        // Χοροπηδητό βήμα προς το επόμενο waypoint
+        piece.userData.hopT += dt * HOP_SPEED;
+        const t = Math.min(1, piece.userData.hopT);
+        const from = piece.userData.hopFrom, to = wps[0];
+        piece.position.x = from.x + (to.x - from.x) * t;
+        piece.position.z = from.z + (to.z - from.z) * t;
+        piece.position.y = Math.sin(t * Math.PI) * HOP_HEIGHT;
+        // ελαφρύ stretch στον αέρα, squash στην προσγείωση
+        const squash = 1 + Math.sin(t * Math.PI) * 0.12 - (t > 0.92 ? 0.08 : 0);
+        piece.scale.y = squash;
+        if (t >= 1) {
+          piece.position.y = 0;
+          piece.scale.y = 1;
+          piece.userData.hopFrom = wps.shift().clone();
+          piece.userData.hopT = 0;
+          if (!wps.length) {
+            delete piece.userData.waypoints;
+            delete piece.userData.hopFrom;
+          }
+        }
+        continue;
+      }
       const target = piece.userData.targetPos;
       if (!target) continue;
       piece.position.lerp(target, Math.min(1, dt * 9));

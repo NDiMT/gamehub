@@ -230,8 +230,10 @@ export const commands = {
     if (!dist.has(key(dest[0], dest[1]))) return false;
 
     // Βήμα-βήμα: πόρτες ανοίγουν, παγίδες σκάνε
+    const walked = [];
     for (const [x, y] of path) {
       hero.x = x; hero.y = y;
+      walked.push([x, y]);
       s.turn.moved++;
       hero.inPit = false;
 
@@ -256,6 +258,7 @@ export const commands = {
       }
       if (s.phase !== "playing") break;
     }
+    if (walked.length) (s.fxMoves ||= []).push({ key: `hero_${hero.id}`, path: walked });
     return true;
   },
 
