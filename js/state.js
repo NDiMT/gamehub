@@ -94,7 +94,7 @@ function rng(s) {
 function revealArea(s, board, areaId) {
   if (!s.revealed[areaId]) {
     s.revealed[areaId] = true;
-    pushLog(s, `Αποκαλύπτεται νέα περιοχή...`, "reveal");
+    pushLog(s, `A new area is revealed...`, "reveal");
   }
 }
 
@@ -110,13 +110,13 @@ function monstersInArea(s, areaId) {
 
 function damageHero(s, hero, amount, source) {
   hero.body = Math.max(0, hero.body - amount);
-  pushLog(s, `${HEROES[hero.id].name}: -${amount} Σώμα (${source}). Απομένουν ${hero.body}.`, "damage");
+  pushLog(s, `${HEROES[hero.id].name} loses ${amount} Body (${source}). ${hero.body} left.`, "damage");
   if (hero.body === 0) {
     hero.alive = false;
-    pushLog(s, `☠ ${HEROES[hero.id].name} έπεσε!`, "death");
+    pushLog(s, `☠ ${HEROES[hero.id].name} has fallen!`, "death");
     if (Object.values(s.heroes).every((h) => !h.alive)) {
       s.phase = "defeat";
-      pushLog(s, "Το σκοτάδι κατάπιε την ομάδα. ΗΤΤΑ.", "end");
+      pushLog(s, "Darkness swallows the party. DEFEAT.", "end");
     }
   }
 }
@@ -126,14 +126,14 @@ function damageMonster(s, monster, amount) {
   const def = MONSTERS[monster.type];
   if (monster.body <= 0) {
     monster.alive = false;
-    pushLog(s, `💀 ${def.name} καταστράφηκε!`, "kill");
+    pushLog(s, `💀 ${def.name} is destroyed!`, "kill");
     const obj = s.quest.objective;
     if (obj.type === "killBoss" && monster.id === obj.target) {
       s.phase = "victory";
-      pushLog(s, "Ο STONEWRATH σωριάζεται σε ερείπια. ΝΙΚΗ!", "end");
+      pushLog(s, "STONEWRATH crumbles to rubble. VICTORY!", "end");
     }
   } else {
-    pushLog(s, `${def.name}: -${amount} Σώμα.`, "damage");
+    pushLog(s, `${def.name} loses ${amount} Body.`, "damage");
   }
 }
 
@@ -143,19 +143,19 @@ function triggerTrap(s, board, hero, trapDef) {
   ts.revealed = true;
   const r = rng(s);
   if (trapDef.type === "pit") {
-    damageHero(s, hero, RULES.pitDamage, "λάκκος");
+    damageHero(s, hero, RULES.pitDamage, "pit trap");
     hero.inPit = true;
     s.turn.over = true;
-    pushLog(s, `${HEROES[hero.id].name} έπεσε σε λάκκο! Τέλος γύρου.`, "trap");
+    pushLog(s, `${HEROES[hero.id].name} fell into a pit! Turn ends.`, "trap");
   } else if (trapDef.type === "spear") {
     const face = DIE_FACES[Math.floor(r() * 6)];
-    if (face === "skull") damageHero(s, hero, RULES.spearDamage, "δόρυ-παγίδα");
-    else pushLog(s, `${HEROES[hero.id].name} απέφυγε το δόρυ!`, "trap");
+    if (face === "skull") damageHero(s, hero, RULES.spearDamage, "spear trap");
+    else pushLog(s, `${HEROES[hero.id].name} dodged the spear!`, "trap");
     s.turn.over = true;
   } else if (trapDef.type === "chest") {
     const face = DIE_FACES[Math.floor(r() * 6)];
-    if (face !== "white") damageHero(s, hero, 1, "παγιδευμένο σεντούκι");
-    else pushLog(s, `${HEROES[hero.id].name} τράβηξε το χέρι εγκαίρως!`, "trap");
+    if (face !== "white") damageHero(s, hero, 1, "trapped chest");
+    else pushLog(s, `${HEROES[hero.id].name} pulled back just in time!`, "trap");
     s.turn.over = true;
   }
 }
@@ -168,12 +168,12 @@ function spawnWandering(s, board, hero) {
     if (areaAt(board, x, y) && !monsterAt(s, x, y) && !heroAt(s, x, y)) {
       const id = `w${s.rngCalls}`;
       s.monsters[id] = { id, type, x, y, area: areaAt(board, x, y), body: def.body, alive: true, held: false };
-      pushLog(s, `Ένα ${def.name} ξεπροβάλλει από τις σκιές και επιτίθεται!`, "monster");
+      pushLog(s, `A ${def.name} lunges out of the shadows and attacks!`, "monster");
       resolveAttack(s, s.monsters[id], hero, def.attack, true);
       return;
     }
   }
-  pushLog(s, "Ακούγονται βήματα... αλλά τίποτα δεν χωράει να περάσει.", "monster");
+  pushLog(s, "Footsteps echo... but nothing can squeeze through.", "monster");
 }
 
 function resolveAttack(s, attacker, defender, attackDice, attackerIsMonster) {
@@ -193,7 +193,7 @@ function resolveAttack(s, attacker, defender, attackDice, attackerIsMonster) {
   const atkName = attackerIsMonster ? MONSTERS[attacker.type].name : HEROES[attacker.id].name;
   const defName = defenderIsHero ? HEROES[defender.id].name : MONSTERS[defender.type].name;
   s.lastDice = { attacker: atkName, defender: defName, atk, def, shieldFace, damage };
-  pushLog(s, `${atkName} ⚔ ${defName}: ${skulls} κρανία vs ${shields} ασπίδες → ${damage} ζημιά.`, "combat");
+  pushLog(s, `${atkName} ⚔ ${defName}: ${skulls} skulls vs ${shields} shields → ${damage} damage.`, "combat");
 
   if (damage > 0) {
     if (defenderIsHero) damageHero(s, defender, damage, atkName);
@@ -212,7 +212,8 @@ export const commands = {
     const dice = [rollDie(r), rollDie(r)];
     s.turn.moveRoll = dice;
     s.turn.moved = 0;
-    pushLog(s, `${HEROES[activeHero(s).id].name} ρίχνει κίνηση: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, "roll");
+    s.lastRoll = { hero: HEROES[activeHero(s).id].name, dice };
+    pushLog(s, `${HEROES[activeHero(s).id].name} rolls movement: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, "roll");
     return true;
   },
 
@@ -237,7 +238,7 @@ export const commands = {
       const door = board.doorAt.get(key(x, y));
       if (door && !s.doors[door.id].open) {
         s.doors[door.id].open = true;
-        pushLog(s, `Η πόρτα ανοίγει...`, "door");
+        pushLog(s, `The door creaks open...`, "door");
         for (const aid of door.between) revealArea(s, board, aid);
       }
       const area = areaAt(board, x, y);
@@ -287,7 +288,7 @@ export const commands = {
       if (!target?.alive) return false;
       if (target !== hero && !lineOfSight(board, s, hero.x, hero.y, target.x, target.y)) return false;
       target.body = Math.min(target.maxBody, target.body + 4);
-      pushLog(s, `✨ ${SPELLS.heal.name}: ${HEROES[target.id].name} → ${target.body} Σώμα.`, "spell");
+      pushLog(s, `✨ ${SPELLS.heal.name}: ${HEROES[target.id].name} → ${target.body} Body.`, "spell");
     } else if (spellId === "bolt") {
       const target = s.monsters[targetId];
       if (!target?.alive || !lineOfSight(board, s, hero.x, hero.y, target.x, target.y)) return false;
@@ -297,7 +298,7 @@ export const commands = {
       const target = s.monsters[targetId];
       if (!target?.alive || !lineOfSight(board, s, hero.x, hero.y, target.x, target.y)) return false;
       target.held = true;
-      pushLog(s, `✨ ${SPELLS.hold.name}: το ${MONSTERS[target.type].name} πάγωσε!`, "spell");
+      pushLog(s, `✨ ${SPELLS.hold.name}: the ${MONSTERS[target.type].name} freezes!`, "spell");
     } else return false;
 
     hero.spells = hero.spells.filter((id) => id !== spellId);
@@ -332,6 +333,7 @@ export const commands = {
       if (special.gold) hero.gold += special.gold;
       if (special.artifact) hero.artifacts.push(special.artifact);
       pushLog(s, `🎁 ${special.text}`, "treasure");
+      s.lastCard = { text: special.text, kind: "special" };
       return true;
     }
 
@@ -345,9 +347,13 @@ export const commands = {
     if (!card.returns) s.deckExcluded.push(card.id);
 
     pushLog(s, `🃏 ${card.text}`, "treasure");
+    s.lastCard = {
+      text: card.text,
+      kind: card.wandering ? "monster" : card.damage ? "hazard" : card.potion ? "potion" : "gold",
+    };
     if (card.gold) hero.gold += card.gold;
     if (card.potion) hero.potions.push(card.potion);
-    if (card.damage) damageHero(s, hero, card.damage, "κίνδυνος");
+    if (card.damage) damageHero(s, hero, card.damage, "hazard");
     if (card.wandering) spawnWandering(s, board, hero);
     return true;
   },
@@ -378,10 +384,10 @@ export const commands = {
       if (touchesArea) {
         s.doors[d.id].revealed = true;
         found++;
-        pushLog(s, "🚪 Μυστική πόρτα αποκαλύφθηκε!", "reveal");
+        pushLog(s, "🚪 A secret door is revealed!", "reveal");
       }
     }
-    pushLog(s, found ? `Η έρευνα αποκάλυψε ${found} κρυφά στοιχεία.` : "Η έρευνα δεν βρήκε τίποτα.", "search");
+    pushLog(s, found ? `The search uncovered ${found} hidden feature(s).` : "The search found nothing.", "search");
     return true;
   },
 
@@ -403,11 +409,11 @@ export const commands = {
     const r = rng(s);
     const face = DIE_FACES[Math.floor(r() * 6)];
     if (face === "black") {
-      pushLog(s, `Ο αφοπλισμός απέτυχε!`, "trap");
+      pushLog(s, `Disarm failed!`, "trap");
       triggerTrap(s, board, hero, trapDef);
     } else {
       ts.disarmed = true;
-      pushLog(s, `🔧 Η παγίδα αφοπλίστηκε.`, "trap");
+      pushLog(s, `🔧 Trap disarmed.`, "trap");
     }
     return true;
   },
@@ -420,10 +426,10 @@ export const commands = {
     hero.potions.splice(idx, 1);
     if (potion === "heal2") {
       hero.body = Math.min(hero.maxBody, hero.body + RULES.potionHeal);
-      pushLog(s, `🧪 ${HEROES[hero.id].name} πίνει Φίλτρο Ίασης → ${hero.body} Σώμα.`, "potion");
+      pushLog(s, `🧪 ${HEROES[hero.id].name} drinks a Healing Potion → ${hero.body} Body.`, "potion");
     } else if (potion === "str1") {
       hero.strBonus = 1;
-      pushLog(s, `🧪 ${HEROES[hero.id].name} πίνει Φίλτρο Ορμής (+1 ζάρι στην επόμενη επίθεση).`, "potion");
+      pushLog(s, `🧪 ${HEROES[hero.id].name} drinks a Potion of Fury (+1 die next attack).`, "potion");
     }
     return true;
   },

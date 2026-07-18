@@ -1,31 +1,35 @@
-// CRYPTBOUND — όλα τα gameplay νούμερα σε ένα σημείο.
+// CRYPTBOUND — all gameplay numbers and text in one place.
 export const HEROES = {
   warrior: {
-    id: "warrior", name: "Θάρβα", title: "η Πολεμίστρια",
+    id: "warrior", name: "Tharva", title: "the Warrior",
     attack: 3, defense: 2, body: 8, mind: 2,
     color: 0xc0392b, trait: "melee",
+    blurb: "Raw strength. Hits hardest, takes the most.",
   },
   sapper: {
-    id: "sapper", name: "Μπρογκ", title: "ο Σκαπανέας",
+    id: "sapper", name: "Brogg", title: "the Sapper",
     attack: 2, defense: 2, body: 7, mind: 3,
     color: 0xd4a017, trait: "disarm",
+    blurb: "Disarms traps with bare hands.",
   },
   shadowarcher: {
-    id: "shadowarcher", name: "Νίρα", title: "η Σκιοτοξότρια",
+    id: "shadowarcher", name: "Nyra", title: "the Shadow Archer",
     attack: 2, defense: 2, body: 6, mind: 4,
     color: 0x27ae60, trait: "ranged",
+    blurb: "Strikes from afar with line of sight.",
   },
   mystic: {
-    id: "mystic", name: "Ωρίων", title: "ο Μύστης",
+    id: "mystic", name: "Orion", title: "the Mystic",
     attack: 1, defense: 2, body: 4, mind: 6,
     color: 0x8e44ad, trait: "spells",
+    blurb: "Three spells. Fragile but decisive.",
   },
 };
 
 export const SPELLS = {
-  heal: { id: "heal", name: "Φως της Ίασης", desc: "+4 Σώμα σε ήρωα σε οπτική επαφή (ή σε εσένα)", target: "hero" },
-  bolt: { id: "bolt", name: "Βολή Θράκας", desc: "Ranged επίθεση 2 ζάρια σε τέρας σε οπτική επαφή", target: "monster" },
-  hold: { id: "hold", name: "Πέτρινο Κράτημα", desc: "Τέρας σε οπτική επαφή χάνει την επόμενη ενεργοποίησή του", target: "monster" },
+  heal: { id: "heal", name: "Healing Light", icon: "✨", desc: "Restore 4 Body to a hero you can see (or yourself)", target: "hero" },
+  bolt: { id: "bolt", name: "Ember Bolt", icon: "🔥", desc: "Ranged attack with 2 combat dice, needs line of sight", target: "monster" },
+  hold: { id: "hold", name: "Stone Grip", icon: "🗿", desc: "A monster you can see loses its next activation", target: "monster" },
 };
 
 export const MONSTERS = {
@@ -35,18 +39,18 @@ export const MONSTERS = {
   stonewrath: { id: "stonewrath", name: "STONEWRATH", move: 6, attack: 4, defense: 4, body: 3, color: 0x707078, boss: true },
 };
 
-// Ζάρι μάχης: 3 όψεις κρανίο, 2 λευκή ασπίδα, 1 μαύρη ασπίδα
+// Combat die: 3 skull faces, 2 white shields, 1 black shield
 export const DIE_FACES = ["skull", "skull", "skull", "white", "white", "black"];
 
-// Τράπουλα θησαυρών (βάρη): τραβιέται τυχαία με seeded RNG στον host
+// Treasure deck (weighted); drawn with seeded RNG on the host
 export const TREASURE_DECK = [
-  { id: "gold25", text: "Βρίσκεις 25 χρυσά.", gold: 25, weight: 4, returns: false },
-  { id: "gold50", text: "Βρίσκεις 50 χρυσά!", gold: 50, weight: 3, returns: false },
-  { id: "gem", text: "Ένας τάλισμαν από οψιδιανό — αξίζει 75 χρυσά.", gold: 75, weight: 2, returns: false },
-  { id: "potion_heal", text: "Φίλτρο Ίασης (+2 Σώμα, όποτε το πιεις στη σειρά σου).", potion: "heal2", weight: 3, returns: false },
-  { id: "potion_str", text: "Φίλτρο Ορμής (+1 ζάρι στην επόμενη επίθεσή σου).", potion: "str1", weight: 2, returns: false },
-  { id: "hazard_dart", text: "Βέλος πετάγεται από τον τοίχο! Χάνεις 1 Σώμα.", damage: 1, weight: 3, returns: true },
-  { id: "wandering", text: "Κάτι σε άκουσε... Περιπλανώμενο τέρας!", wandering: true, weight: 3, returns: true },
+  { id: "gold25", text: "You find 25 gold coins.", gold: 25, weight: 4, returns: false },
+  { id: "gold50", text: "You find 50 gold coins!", gold: 50, weight: 3, returns: false },
+  { id: "gem", text: "An obsidian talisman — worth 75 gold.", gold: 75, weight: 2, returns: false },
+  { id: "potion_heal", text: "A Healing Potion (+2 Body, drink on your turn).", potion: "heal2", weight: 3, returns: false },
+  { id: "potion_str", text: "A Potion of Fury (+1 die on your next attack).", potion: "str1", weight: 2, returns: false },
+  { id: "hazard_dart", text: "A dart shoots from the wall! You lose 1 Body.", damage: 1, weight: 3, returns: true },
+  { id: "wandering", text: "Something heard you... A wandering monster!", wandering: true, weight: 3, returns: true },
 ];
 
 export const RULES = {

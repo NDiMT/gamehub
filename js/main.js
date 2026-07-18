@@ -21,7 +21,7 @@ let state = null;        // αντίγραφο για render (host: το αυθ�
 let view = null;
 let uiMode = { selecting: null }; // "attack" | "spell:xxx" | "disarm" | null
 
-const myName = () => (ui.el.nameInput.value || "Ήρωας").trim().slice(0, 14);
+const myName = () => (ui.el.nameInput.value || "Hero").trim().slice(0, 14);
 
 // ---------- Home ----------
 ui.el.btnHost.addEventListener("click", () => startHost(pickTransport()));
@@ -44,7 +44,7 @@ async function startHost(transport, solo = false) {
       if (lobby.players.some((p) => p.clientId === msg.clientId)) return; // διπλό hello
       const seat = lobby.players.length;
       lobby.players.push({
-        seat, name: msg.name || `Παίκτης ${seat + 1}`, heroId: null, clientId: msg.clientId,
+        seat, name: msg.name || `Player ${seat + 1}`, heroId: null, clientId: msg.clientId,
       });
       broadcastLobby();
     });
@@ -64,7 +64,7 @@ async function startHost(transport, solo = false) {
     ui.show(ui.el.lobby);
     ui.renderLobby(lobby, mySeat, true);
   } catch (err) {
-    ui.el.homeError.textContent = "Αποτυχία δημιουργίας δωματίου: " + err.message;
+    ui.el.homeError.textContent = "Could not create the room: " + err.message;
   }
 }
 
@@ -72,7 +72,7 @@ async function startJoin() {
   try {
     ui.el.homeError.textContent = "";
     const code = ui.el.codeInput.value.trim().toUpperCase();
-    if (code.length !== 4) { ui.el.homeError.textContent = "Βάλε 4ψήφιο κωδικό."; return; }
+    if (code.length !== 4) { ui.el.homeError.textContent = "Enter the 4-letter room code."; return; }
     const conn = await pickTransport().joinRoom(code);
     net = conn;
     isHost = false;
@@ -85,13 +85,13 @@ async function startJoin() {
         ui.show(ui.el.lobby);
         ui.renderLobby(lobby, mySeat, false);
       } else if (msg.type === "state") {
-        onStateReceived(msg.state, msg.lastDice);
+        onStateReceived(msg.state, msg);
       }
     });
-    conn.onClosed(() => ui.toast("Χάθηκε η σύνδεση με τον host."));
+    conn.onClosed(() => ui.toast("Connection to the host was lost."));
     conn.send({ type: "hello", name: myName(), clientId });
   } catch (err) {
-    ui.el.homeError.textContent = "Δεν βρέθηκε το δωμάτιο: " + err.message;
+    ui.el.homeError.textContent = "Room not found: " + err.message;
   }
 }
 
@@ -146,9 +146,10 @@ function hostApply(seat, cmd, args) {
 // ---------- State διάδοση ----------
 function broadcastState() {
   const snapshot = structuredClone(serializable(state));
-  if (net?.broadcast) net.broadcast({ type: "state", state: snapshot, lastDice: state.lastDice });
-  onStateReceived(snapshot, state.lastDice);
-  state.lastDice = null;
+  const fx = { lastDice: state.lastDice, lastRoll: state.lastRoll, lastCard: state.lastCard };
+  if (net?.broadcast) net.broadcast({ type: "state", state: snapshot, ...fx });
+  onStateReceived(snapshot, fx);
+  state.lastDice = state.lastRoll = state.lastCard = null;
 }
 
 function serializable(s) {
@@ -156,7 +157,7 @@ function serializable(s) {
   return rest;
 }
 
-async function onStateReceived(newState, lastDice) {
+async function onStateReceived(newState, fx = {}) {
   if (!isHost) state = newState;
   const renderState = state;
 
@@ -165,12 +166,15 @@ async function onStateReceived(newState, lastDice) {
   ui.renderTurnBar(renderState, mySeat);
   ui.renderHeroCard(renderState, mySeat);
   ui.renderLog(renderState);
-  if (lastDice) ui.showDice(lastDice);
+  if (fx.lastDice) ui.showCombatDice(fx.lastDice);
+  else if (fx.lastRoll) ui.showMoveDice(fx.lastRoll);
+  if (fx.lastCard) ui.showCard(fx.lastCard);
+  ui.maybeShowTurnBanner(renderState, mySeat);
   refreshActions(renderState);
 
   const activeId = renderState.turnOrder[renderState.turnIndex];
   const active = renderState.heroes[activeId];
-  if (active?.alive) view.focusCell(active.x, active.y);
+  if (active?.alive) { view.focusCell(active.x, active.y); view.setLantern(active.x, active.y); }
 
   if (renderState.phase !== "playing") setTimeout(() => ui.showEnd(renderState), 1800);
   highlightForMode(renderState);
@@ -181,6 +185,10 @@ async function enterGame() {
   ui.show(ui.el.game);
   view = new BoardView(document.getElementById("board-container"), quest, models);
   view.onTap = onCellTap;
+  ui.el.btnCenter.addEventListener("click", () => {
+    const active = state?.heroes[state.turnOrder[state.turnIndex]];
+    if (active) view.focusCell(active.x, active.y);
+  });
 
   const clockStart = performance.now();
   let last = clockStart;
@@ -212,21 +220,14 @@ const handlers = {
   beginSpell: () => {
     const hero = myHero();
     if (!hero?.spells.length) return;
-    // απλός κύκλος επιλογής: πρώτο διαθέσιμο ξόρκι → mode
-    const spellId = hero.spells[0]; // v1: το UI δείχνει το ενεργό, tap ξανά = επόμενο
-    uiMode.selecting = uiMode.selecting?.startsWith("spell:")
-      ? "spell:" + nextSpell(hero, uiMode.selecting.split(":")[1])
-      : "spell:" + spellId;
-    ui.toast("Ξόρκι: " + uiMode.selecting.split(":")[1] + " — διάλεξε στόχο στο ταμπλό (ξαναπάτα ✨ για επόμενο)");
-    refreshActions(state); highlightForMode(state);
+    ui.showSpellSheet(hero, (spellId) => {
+      uiMode.selecting = "spell:" + spellId;
+      ui.toast("Tap a highlighted target on the board");
+      refreshActions(state); highlightForMode(state);
+    });
   },
   cancelSelect: () => { uiMode.selecting = null; refreshActions(state); highlightForMode(state); },
 };
-
-function nextSpell(hero, current) {
-  const i = hero.spells.indexOf(current);
-  return hero.spells[(i + 1) % hero.spells.length];
-}
 
 function myHero() {
   return Object.values(state?.heroes || {}).find((h) => h.seat === mySeat);
@@ -303,6 +304,18 @@ function onCellTap({ x, y }) {
     return;
   }
 
+  // Contextual attack: tap κατευθείαν σε τέρας όταν η ενέργεια είναι διαθέσιμη
+  if (!state.turn.actionUsed && !state.turn.over) {
+    const target = Object.values(state.monsters).find((m) => m.alive && m.x === x && m.y === y);
+    if (target && state.revealed[target.area]) {
+      const board = buildBoard(state.quest);
+      const canMelee = Math.abs(target.x - hero.x) + Math.abs(target.y - hero.y) === 1;
+      const canRanged = HEROES[hero.id].trait === "ranged" && !canMelee &&
+        lineOfSight(board, state, hero.x, hero.y, target.x, target.y);
+      if (canMelee || canRanged) { issue("attack", { targetId: target.id }); return; }
+    }
+  }
+
   // Κίνηση
   if (!state.turn.moveRoll || state.turn.over) return;
   const board = buildBoard(state.quest);
@@ -330,15 +343,15 @@ function monsterAttack(s, monster, hero, dice) {
   const damage = Math.max(0, skulls - shields);
   const atkName = MONSTERS[monster.type].name;
   s.lastDice = { attacker: atkName, defender: HEROES[hero.id].name, atk, def, shieldFace: "white", damage };
-  s.log.push({ t: "combat", text: `${atkName} ⚔ ${HEROES[hero.id].name}: ${skulls} κρανία vs ${shields} ασπίδες → ${damage} ζημιά.` });
+  s.log.push({ t: "combat", text: `${atkName} ⚔ ${HEROES[hero.id].name}: ${skulls} skulls vs ${shields} shields → ${damage} damage.` });
   if (damage > 0) {
     hero.body = Math.max(0, hero.body - damage);
     if (hero.body === 0) {
       hero.alive = false;
-      s.log.push({ t: "death", text: `☠ ${HEROES[hero.id].name} έπεσε!` });
+      s.log.push({ t: "death", text: `☠ ${HEROES[hero.id].name} has fallen!` });
       if (Object.values(s.heroes).every((h) => !h.alive)) {
         s.phase = "defeat";
-        s.log.push({ t: "end", text: "Το σκοτάδι κατάπιε την ομάδα. ΗΤΤΑ." });
+        s.log.push({ t: "end", text: "Darkness swallows the party. DEFEAT." });
       }
     }
   }

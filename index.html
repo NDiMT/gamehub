@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#14101e" />
+  <meta name="theme-color" content="#0b0812" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,46 +19,57 @@
 </head>
 <body>
 
-  <!-- Αρχική -->
-  <div id="screen-home" class="screen">
-    <h1 class="logo">CRYPTBOUND</h1>
-    <p class="tagline">The Shadowkeep</p>
-    <p id="loading-note">Φορτώνονται οι μινιατούρες...</p>
+  <!-- Home -->
+  <div id="screen-home" class="screen parchment-bg">
+    <div class="title-block">
+      <div class="title-rule">⚔ ✦ ⚔</div>
+      <h1 class="logo">CRYPTBOUND</h1>
+      <p class="tagline">— The Shadowkeep —</p>
+    </div>
+    <p id="loading-note" class="dim">Unpacking the miniatures...</p>
     <div class="home-form">
-      <input id="player-name" type="text" maxlength="14" placeholder="Το όνομά σου" autocomplete="off" />
-      <button id="btn-host" class="primary">➕ Δημιουργία παιχνιδιού</button>
+      <input id="player-name" type="text" maxlength="14" placeholder="Your name" autocomplete="off" />
+      <button id="btn-host" class="primary">🕯 Host a game</button>
       <div class="join-row">
-        <input id="join-code" type="text" maxlength="4" placeholder="ΚΩΔΙΚΟΣ" autocomplete="off" />
-        <button id="btn-join">Σύνδεση</button>
+        <input id="join-code" type="text" maxlength="4" placeholder="CODE" autocomplete="off" />
+        <button id="btn-join">Join</button>
       </div>
-      <button id="btn-solo" class="ghost">🗡 Σόλο εξερεύνηση</button>
+      <button id="btn-solo" class="ghost">🗡 Solo delve</button>
       <p id="home-error" class="error"></p>
     </div>
+    <p class="fine-print">1–4 heroes, each on their own phone · The dungeon plays itself</p>
   </div>
 
   <!-- Lobby -->
-  <div id="screen-lobby" class="screen hidden">
-    <h2>Δωμάτιο <span id="lobby-code">—</span></h2>
+  <div id="screen-lobby" class="screen parchment-bg">
+    <h2 class="lobby-title">Party gathers at room <span id="lobby-code">—</span></h2>
     <p id="lobby-hint" class="dim"></p>
     <div id="lobby-slots"></div>
-    <button id="btn-start" class="primary hidden">▶ ΕΝΑΡΞΗ ΑΠΟΣΤΟΛΗΣ</button>
+    <button id="btn-start" class="primary hidden">⚔ BEGIN THE QUEST</button>
   </div>
 
-  <!-- Παιχνίδι -->
+  <!-- Game -->
   <div id="screen-game" class="screen hidden">
     <div id="board-container"></div>
+    <div id="table-vignette"></div>
     <div id="turn-bar"></div>
+    <div id="objective-chip"></div>
     <div id="hero-card"></div>
+    <button id="btn-center" title="Center on active hero">🎯</button>
     <div id="game-log"></div>
-    <div id="dice-overlay" class="hidden"></div>
+    <div id="dice-tray" class="hidden"></div>
+    <div id="turn-banner" class="hidden"></div>
+    <div id="card-overlay" class="hidden"></div>
+    <div id="bottom-sheet" class="hidden"></div>
     <div id="action-bar"></div>
   </div>
 
-  <!-- Τέλος -->
-  <div id="screen-end" class="screen hidden">
+  <!-- End -->
+  <div id="screen-end" class="screen parchment-bg">
     <h1 id="end-title"></h1>
     <p id="end-text"></p>
-    <button id="btn-again" class="primary">↺ Ξανά</button>
+    <div id="end-stats"></div>
+    <button id="btn-again" class="primary">↺ Play again</button>
   </div>
 
   <div id="toast" class="hidden"></div>

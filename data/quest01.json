@@ -1,56 +1,345 @@
 {
   "id": "quest01",
-  "name": "Ο Φρουρός του Shadowkeep",
-  "intro": "Η κρύπτη του Shadowkeep άνοιξε. Ο λίθινος δαίμονας STONEWRATH αφυπνίζει τους Hollow έναν-έναν. Κατεβείτε, βρείτε τον, και γκρεμίστε τον πριν σηκωθεί ο στρατός του.",
-  "objective": { "type": "killBoss", "target": "boss1", "text": "Εξοντώστε τον STONEWRATH" },
+  "name": "The Warden of the Shadowkeep",
+  "intro": "The crypt of the Shadowkeep has opened. The stone demon STONEWRATH is waking the Hollow one by one. Descend, find him, and bring him down before his army rises.",
+  "objective": {
+    "type": "killBoss",
+    "target": "boss1",
+    "text": "Slay STONEWRATH"
+  },
   "width": 15,
   "height": 21,
   "areas": [
-    { "id": "boss",  "type": "room",     "rects": [[4, 1, 7, 3]] },
-    { "id": "guard", "type": "room",     "rects": [[1, 5, 5, 4]] },
-    { "id": "crypt", "type": "room",     "rects": [[9, 5, 5, 4]] },
-    { "id": "vault", "type": "room",     "rects": [[1, 12, 5, 4]] },
-    { "id": "ritual","type": "room",     "rects": [[9, 12, 5, 4]] },
-    { "id": "entry", "type": "room",     "rects": [[5, 17, 5, 3]] },
-    { "id": "spine", "type": "corridor", "rects": [[7, 4, 1, 13]] },
-    { "id": "cross", "type": "corridor", "rects": [[2, 10, 11, 1]] }
+    {
+      "id": "boss",
+      "type": "room",
+      "rects": [
+        [
+          4,
+          1,
+          7,
+          3
+        ]
+      ]
+    },
+    {
+      "id": "guard",
+      "type": "room",
+      "rects": [
+        [
+          1,
+          5,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "crypt",
+      "type": "room",
+      "rects": [
+        [
+          9,
+          5,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "room",
+      "rects": [
+        [
+          1,
+          12,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "ritual",
+      "type": "room",
+      "rects": [
+        [
+          9,
+          12,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "entry",
+      "type": "room",
+      "rects": [
+        [
+          5,
+          17,
+          5,
+          3
+        ]
+      ]
+    },
+    {
+      "id": "spine",
+      "type": "corridor",
+      "rects": [
+        [
+          7,
+          4,
+          1,
+          13
+        ]
+      ]
+    },
+    {
+      "id": "cross",
+      "type": "corridor",
+      "rects": [
+        [
+          2,
+          10,
+          11,
+          1
+        ]
+      ]
+    }
   ],
   "doors": [
-    { "id": "d_entry",  "cell": [7, 16], "between": ["entry", "spine"] },
-    { "id": "d_boss",   "cell": [7, 4],  "between": ["boss", "spine"] },
-    { "id": "d_guard",  "cell": [6, 7],  "between": ["guard", "spine"] },
-    { "id": "d_crypt",  "cell": [8, 6],  "between": ["crypt", "spine"] },
-    { "id": "d_vault",  "cell": [6, 13], "between": ["vault", "spine"] },
-    { "id": "d_ritual", "cell": [8, 14], "between": ["ritual", "spine"] },
-    { "id": "d_secret", "cell": [3, 9],  "between": ["guard", "cross"], "secret": true }
+    {
+      "id": "d_entry",
+      "cell": [
+        7,
+        16
+      ],
+      "between": [
+        "entry",
+        "spine"
+      ]
+    },
+    {
+      "id": "d_boss",
+      "cell": [
+        7,
+        4
+      ],
+      "between": [
+        "boss",
+        "spine"
+      ]
+    },
+    {
+      "id": "d_guard",
+      "cell": [
+        6,
+        7
+      ],
+      "between": [
+        "guard",
+        "spine"
+      ]
+    },
+    {
+      "id": "d_crypt",
+      "cell": [
+        8,
+        6
+      ],
+      "between": [
+        "crypt",
+        "spine"
+      ]
+    },
+    {
+      "id": "d_vault",
+      "cell": [
+        6,
+        13
+      ],
+      "between": [
+        "vault",
+        "spine"
+      ]
+    },
+    {
+      "id": "d_ritual",
+      "cell": [
+        8,
+        14
+      ],
+      "between": [
+        "ritual",
+        "spine"
+      ]
+    },
+    {
+      "id": "d_secret",
+      "cell": [
+        3,
+        9
+      ],
+      "between": [
+        "guard",
+        "cross"
+      ],
+      "secret": true
+    }
   ],
-  "start": { "area": "entry", "stairs": [7, 18] },
+  "start": {
+    "area": "entry",
+    "stairs": [
+      7,
+      18
+    ]
+  },
   "monsters": [
-    { "id": "g1", "type": "grunt",   "cell": [2, 6],   "area": "guard" },
-    { "id": "g2", "type": "grunt",   "cell": [4, 8],   "area": "guard" },
-    { "id": "h1", "type": "hollow",  "cell": [10, 6],  "area": "crypt" },
-    { "id": "h2", "type": "hollow",  "cell": [12, 8],  "area": "crypt" },
-    { "id": "g3", "type": "grunt",   "cell": [13, 5],  "area": "crypt" },
-    { "id": "h3", "type": "hollow",  "cell": [3, 14],  "area": "vault" },
-    { "id": "a1", "type": "acolyte", "cell": [10, 13], "area": "ritual" },
-    { "id": "a2", "type": "acolyte", "cell": [12, 15], "area": "ritual" },
-    { "id": "a3", "type": "acolyte", "cell": [5, 2],   "area": "boss" },
-    { "id": "boss1", "type": "stonewrath", "cell": [8, 2], "area": "boss" }
+    {
+      "id": "g1",
+      "type": "grunt",
+      "cell": [
+        2,
+        6
+      ],
+      "area": "guard"
+    },
+    {
+      "id": "g2",
+      "type": "grunt",
+      "cell": [
+        4,
+        8
+      ],
+      "area": "guard"
+    },
+    {
+      "id": "h1",
+      "type": "hollow",
+      "cell": [
+        10,
+        6
+      ],
+      "area": "crypt"
+    },
+    {
+      "id": "h2",
+      "type": "hollow",
+      "cell": [
+        12,
+        8
+      ],
+      "area": "crypt"
+    },
+    {
+      "id": "g3",
+      "type": "grunt",
+      "cell": [
+        13,
+        5
+      ],
+      "area": "crypt"
+    },
+    {
+      "id": "h3",
+      "type": "hollow",
+      "cell": [
+        3,
+        14
+      ],
+      "area": "vault"
+    },
+    {
+      "id": "a1",
+      "type": "acolyte",
+      "cell": [
+        10,
+        13
+      ],
+      "area": "ritual"
+    },
+    {
+      "id": "a2",
+      "type": "acolyte",
+      "cell": [
+        12,
+        15
+      ],
+      "area": "ritual"
+    },
+    {
+      "id": "a3",
+      "type": "acolyte",
+      "cell": [
+        5,
+        2
+      ],
+      "area": "boss"
+    },
+    {
+      "id": "boss1",
+      "type": "stonewrath",
+      "cell": [
+        8,
+        2
+      ],
+      "area": "boss"
+    }
   ],
   "furniture": [
-    { "type": "chest",  "cell": [2, 15], "area": "vault" },
-    { "type": "stairs", "cell": [7, 18], "area": "entry" }
+    {
+      "type": "chest",
+      "cell": [
+        2,
+        15
+      ],
+      "area": "vault"
+    },
+    {
+      "type": "stairs",
+      "cell": [
+        7,
+        18
+      ],
+      "area": "entry"
+    }
   ],
   "traps": [
-    { "id": "t1", "type": "pit",   "cell": [7, 9] },
-    { "id": "t2", "type": "spear", "cell": [7, 13] },
-    { "id": "t3", "type": "chest", "cell": [2, 15], "area": "vault" }
+    {
+      "id": "t1",
+      "type": "pit",
+      "cell": [
+        7,
+        9
+      ]
+    },
+    {
+      "id": "t2",
+      "type": "spear",
+      "cell": [
+        7,
+        13
+      ]
+    },
+    {
+      "id": "t3",
+      "type": "chest",
+      "cell": [
+        2,
+        15
+      ],
+      "area": "vault"
+    }
   ],
   "questTreasures": [
     {
       "area": "vault",
-      "text": "Μέσα στο σεντούκι: το Έμβλημα του Φύλακα (+1 ζάρι άμυνας) και 100 χρυσά!",
-      "artifact": { "id": "wardens_sigil", "name": "Έμβλημα του Φύλακα", "defenseBonus": 1 },
+      "text": "Inside the chest: the Warden's Sigil (+1 defense die) and 100 gold!",
+      "artifact": {
+        "id": "wardens_sigil",
+        "name": "Warden's Sigil",
+        "defenseBonus": 1
+      },
       "gold": 100
     }
   ],

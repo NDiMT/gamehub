@@ -8,11 +8,73 @@ import { fallbackMini, fallbackProp } from "./assets.js";
 
 const TILE = 1;
 const COLORS = {
-  room: 0x8a7a6a, roomDark: 0x7d6e5f,
-  corridor: 0x5e5a55, corridorDark: 0x555149,
-  wall: 0x3a3242, wallTop: 0x4a4054,
-  highlight: 0x66ffcc, danger: 0xff5566, hidden: 0x0c0a14,
+  room: 0xcdbfa8, roomDark: 0xbcae97,
+  corridor: 0x9d968b, corridorDark: 0x8f887d,
+  wall: 0x6e6577, wallTop: 0x4a4054,
+  highlight: 0x66ffcc, danger: 0xff5566, hidden: 0x14101e,
+  table: 0x6b4a2a, frame: 0x3d2a16,
 };
+
+// ---------- Procedural υφές (canvas) — πέτρα και ξύλο, χωρίς assets ----------
+function canvasTexture(size, draw) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  draw(ctx, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function stoneTexture(seedShift = 0) {
+  return canvasTexture(128, (ctx, s) => {
+    ctx.fillStyle = "#a99f90";
+    ctx.fillRect(0, 0, s, s);
+    // κόκκος πέτρας
+    for (let i = 0; i < 900; i++) {
+      const x = (Math.sin(i * 12.9898 + seedShift) * 43758.5453) % 1;
+      const y = (Math.sin(i * 78.233 + seedShift) * 12578.1459) % 1;
+      const v = 150 + Math.floor(((x + y) * 7919) % 60);
+      ctx.fillStyle = `rgba(${v},${v - 8},${v - 18},0.25)`;
+      ctx.fillRect(Math.abs(x) * s, Math.abs(y) * s, 2, 2);
+    }
+    // ρωγμές
+    ctx.strokeStyle = "rgba(40,32,28,0.35)";
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      let x = ((i * 37 + seedShift * 13) % s), y = 0;
+      ctx.moveTo(x, y);
+      while (y < s) { x += (Math.sin(y * 0.2 + i) * 6); y += 14; ctx.lineTo(x, y); }
+      ctx.stroke();
+    }
+    // αρμός περιμετρικά
+    ctx.strokeStyle = "rgba(30,24,20,0.85)";
+    ctx.lineWidth = 6;
+    ctx.strokeRect(0, 0, s, s);
+  });
+}
+
+function woodTexture() {
+  return canvasTexture(256, (ctx, s) => {
+    ctx.fillStyle = "#5d3f22";
+    ctx.fillRect(0, 0, s, s);
+    for (let y = 0; y < s; y += 32) {
+      ctx.fillStyle = y % 64 ? "#54381d" : "#66452a";
+      ctx.fillRect(0, y, s, 30);
+      ctx.strokeStyle = "rgba(20,10,4,0.6)";
+      ctx.beginPath(); ctx.moveTo(0, y + 31); ctx.lineTo(s, y + 31); ctx.stroke();
+      // νερά ξύλου
+      for (let i = 0; i < 12; i++) {
+        ctx.strokeStyle = "rgba(30,18,8,0.25)";
+        ctx.beginPath();
+        ctx.moveTo(0, y + 4 + i * 2.2);
+        for (let x = 0; x < s; x += 16) ctx.lineTo(x, y + 4 + i * 2.2 + Math.sin(x * 0.08 + i) * 1.5);
+        ctx.stroke();
+      }
+    }
+  });
+}
 
 export class BoardView {
   constructor(container, quest, models) {
@@ -26,20 +88,29 @@ export class BoardView {
     this.raycaster = new THREE.Raycaster();
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x14101e);
-    this.scene.fog = new THREE.Fog(0x14101e, 26, 46);
+    this.scene.background = new THREE.Color(0x0b0812);
+    this.scene.fog = new THREE.Fog(0x0b0812, 24, 44);
+    this.textures = {
+      stoneA: stoneTexture(1), stoneB: stoneTexture(7), wood: woodTexture(),
+    };
+    this.flames = [];
+    this.time = 0;
 
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 120);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     container.appendChild(this.renderer.domElement);
-
-    this.scene.add(new THREE.HemisphereLight(0xbfb4e8, 0x2a2438, 1.1));
-    const torch = new THREE.DirectionalLight(0xffd9a0, 1.3);
-    torch.position.set(6, 14, 4);
-    this.scene.add(torch);
-
     this.center = new THREE.Vector3(quest.width / 2, 0, quest.height / 2);
+
+    this.scene.add(new THREE.HemisphereLight(0x9a8fc9, 0x241d30, 0.85));
+    const keyLight = new THREE.DirectionalLight(0xffd9a0, 0.9);
+    keyLight.position.set(6, 14, 4);
+    this.scene.add(keyLight);
+    // Φανάρι που ακολουθεί τον ενεργό ήρωα
+    this.lantern = new THREE.PointLight(0xffb45e, 18, 9, 1.6);
+    this.lantern.position.set(this.center.x, 2.2, this.center.z);
+    this.scene.add(this.lantern);
+
     this.zoom = 1;
     this.panOffset = new THREE.Vector2(0, 0);
 
@@ -148,21 +219,46 @@ export class BoardView {
 
   #buildStatic() {
     const { width, height } = this.quest;
-    const tileGeo = new THREE.BoxGeometry(TILE * 0.98, 0.12, TILE * 0.98);
+    const tileGeo = new THREE.BoxGeometry(TILE * 0.96, 0.12, TILE * 0.96);
+
+    // Το τραπέζι κάτω από όλα
+    const woodMat = new THREE.MeshLambertMaterial({ map: this.textures.wood });
+    this.textures.wood.wrapS = this.textures.wood.wrapT = THREE.RepeatWrapping;
+    this.textures.wood.repeat.set(10, 10);
+    const table = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), woodMat);
+    table.rotation.x = -Math.PI / 2;
+    table.position.set(width / 2, -0.62, height / 2);
+    this.scene.add(table);
+
+    // Η βάση/κορνίζα του ταμπλό — σαν πραγματικό board πάνω στο τραπέζι
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(width + 1.2, 0.5, height + 1.2),
+      new THREE.MeshLambertMaterial({ color: COLORS.frame })
+    );
+    frame.position.set(width / 2, -0.37, height / 2);
+    this.scene.add(frame);
+    const boardTop = new THREE.Mesh(
+      new THREE.BoxGeometry(width + 0.6, 0.1, height + 0.6),
+      new THREE.MeshLambertMaterial({ color: 0x241d30 })
+    );
+    boardTop.position.set(width / 2, -0.13, height / 2);
+    this.scene.add(boardTop);
 
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const area = areaAt(this.board, x, y);
         const door = this.board.doorAt.get(key(x, y));
         if (!area && !door) {
-          // τοίχος
+          // τοίχος — μικρή τυχαία διακύμανση ύψους για «ερειπωμένο» look
           if (this.#nearFloor(x, y)) {
+            const h = 1.0 + ((x * 7 + y * 13) % 5) * 0.06;
             const wall = new THREE.Mesh(
-              new THREE.BoxGeometry(TILE, 1.1, TILE),
-              new THREE.MeshLambertMaterial({ color: COLORS.wall })
+              new THREE.BoxGeometry(TILE, h, TILE),
+              new THREE.MeshLambertMaterial({ map: this.textures.stoneB, color: COLORS.wall })
             );
-            wall.position.set(x + 0.5, 0.55, y + 0.5);
+            wall.position.set(x + 0.5, h / 2, y + 0.5);
             this.scene.add(wall);
+            this.#maybeTorch(x, y);
           }
           continue;
         }
@@ -172,9 +268,13 @@ export class BoardView {
         const baseColor = door ? COLORS.corridor
           : isRoom ? (checker ? COLORS.room : COLORS.roomDark)
           : (checker ? COLORS.corridor : COLORS.corridorDark);
-        const mat = new THREE.MeshLambertMaterial({ color: baseColor });
+        const mat = new THREE.MeshLambertMaterial({
+          map: isRoom ? this.textures.stoneA : this.textures.stoneB,
+          color: baseColor,
+        });
         const tile = new THREE.Mesh(tileGeo, mat);
         tile.position.set(x + 0.5, -0.06, y + 0.5);
+        tile.rotation.y = (Math.PI / 2) * ((x * 3 + y * 5) % 4); // δωρεάν ποικιλία υφής
         tile.userData = { x, y, baseColor };
         this.scene.add(tile);
         this.tileMeshes.set(key(x, y), tile);
@@ -203,6 +303,31 @@ export class BoardView {
       this.scene.add(mesh);
       this.pieces.set(`furn_${f.cell.join("_")}`, mesh);
     }
+  }
+
+  #maybeTorch(x, y) {
+    // αραιά, deterministic: πυρσός σε τοίχο που ακουμπά δάπεδο
+    if ((x * 31 + y * 17) % 9 !== 0) return;
+    const touching = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .some(([dx, dy]) => areaAt(this.board, x + dx, y + dy));
+    if (!touching) return;
+    const flame = new THREE.Mesh(
+      new THREE.ConeGeometry(0.09, 0.3, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffa63e, transparent: true, opacity: 0.95 })
+    );
+    flame.position.set(x + 0.5, 1.35, y + 0.5);
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffcf7a, transparent: true, opacity: 0.3 })
+    );
+    glow.position.copy(flame.position);
+    const stick = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.03, 0.35, 5),
+      new THREE.MeshLambertMaterial({ color: 0x3a2a18 })
+    );
+    stick.position.set(x + 0.5, 1.1, y + 0.5);
+    this.scene.add(flame, glow, stick);
+    this.flames.push({ flame, glow, phase: (x + y * 3) % 10 });
   }
 
   #nearFloor(x, y) {
@@ -289,6 +414,10 @@ export class BoardView {
     }
   }
 
+  setLantern(x, y) {
+    this.lanternTarget = new THREE.Vector3(x + 0.5, 2.1, y + 0.5);
+  }
+
   setHighlights(cells, color = COLORS.highlight) {
     this.clearHighlights();
     for (const k of cells) {
@@ -307,8 +436,9 @@ export class BoardView {
     this.highlights = [];
   }
 
-  // Κλήση σε κάθε frame: ομαλή ολίσθηση μινιατούρων προς τον στόχο τους
+  // Κλήση σε κάθε frame: ολίσθηση μινιατούρων, φλόγες, φανάρι
   animate(dt) {
+    this.time += dt;
     for (const piece of this.pieces.values()) {
       const target = piece.userData.targetPos;
       if (!target) continue;
@@ -316,6 +446,13 @@ export class BoardView {
       if (piece.userData.held) piece.rotation.y += dt * 2;
       else piece.rotation.y *= 0.9;
     }
+    for (const f of this.flames) {
+      const flicker = 1 + Math.sin(this.time * 12 + f.phase) * 0.18 + Math.sin(this.time * 31 + f.phase * 2) * 0.08;
+      f.flame.scale.set(flicker, flicker, flicker);
+      f.glow.material.opacity = 0.22 + Math.abs(Math.sin(this.time * 9 + f.phase)) * 0.14;
+    }
+    if (this.lanternTarget) this.lantern.position.lerp(this.lanternTarget, Math.min(1, dt * 5));
+    this.lantern.intensity = 17 + Math.sin(this.time * 7) * 2.2;
     this.renderer.render(this.scene, this.camera);
   }
 }
