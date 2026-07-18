@@ -99,46 +99,50 @@ export function createUI() {
       <small>⚔${mine.attack} 🛡${shield} · 💰${mine.gold}${potions ? " · " + potions : ""}${mine.alive ? "" : " · ☠ DOWN"}</small>`;
   }
 
-  // ---------- Action bar ----------
+  // ---------- Action bar: μόνο εικονίδια, χωρίς scroll ----------
   function renderActions(state, mySeat, handlers, uiMode) {
     el.actionBar.innerHTML = "";
     const heroId = state.turnOrder[state.turnIndex];
     const hero = state.heroes[heroId];
     if (state.phase !== "playing" || hero.seat !== mySeat) return;
 
-    const mkBtn = (label, fn, disabled = false, cls = "") => {
+    const mkIcon = (icon, label, fn, disabled = false, cls = "") => {
       const b = document.createElement("button");
-      b.innerHTML = label;
+      b.className = "ab " + cls;
       b.disabled = disabled;
-      b.className = cls;
+      b.innerHTML = `<span class="ab-icon">${icon}</span><span class="ab-label">${label}</span>`;
       b.addEventListener("click", fn);
       el.actionBar.appendChild(b);
       return b;
     };
 
+    // Επιβεβαίωση κίνησης: δύο μεγάλα κουμπιά
+    if (uiMode.pendingMove) {
+      mkIcon("✓", `Move ${uiMode.pendingMove.path.length}`, handlers.confirmMove, false, "confirm wide");
+      mkIcon("✕", "Cancel", handlers.cancelMove, false, "cancel wide");
+      return;
+    }
+
     if (uiMode.selecting) {
-      const what = uiMode.selecting.startsWith("spell:")
-        ? SPELLS[uiMode.selecting.split(":")[1]].name
-        : uiMode.selecting === "attack" ? "Attack" : "Disarm";
-      mkBtn(`✖ Cancel ${what}`, handlers.cancelSelect, false, "cancel");
+      mkIcon("✕", "Cancel", handlers.cancelSelect, false, "cancel wide");
       return;
     }
 
     if (!state.turn.moveRoll) {
-      mkBtn("🎲 Roll Movement", handlers.rollMove, state.turn.over, "roll");
+      mkIcon("🎲", "Roll", handlers.rollMove, state.turn.over, "roll");
     } else {
       const left = state.turn.moveRoll[0] + state.turn.moveRoll[1] - state.turn.moved;
-      mkBtn(`👣 ${left} steps`, () => {}, true, "info");
+      mkIcon("👣", `${left} left`, () => {}, true, "info");
     }
 
     const actionDone = state.turn.actionUsed || state.turn.over;
-    mkBtn("⚔️ Attack", handlers.beginAttack, actionDone);
-    if (hero.spells?.length) mkBtn("✨ Spell", handlers.beginSpell, actionDone);
-    mkBtn("🔍 Search", handlers.searchTreasure, actionDone);
-    mkBtn("🕵 Inspect", handlers.searchTraps, actionDone);
-    if (HEROES[hero.id].trait === "disarm") mkBtn("🔧 Disarm", handlers.beginDisarm, actionDone);
-    if (hero.potions.length) mkBtn("🧪 Potion", handlers.drinkPotion, state.turn.over);
-    mkBtn("End Turn ⏭", handlers.endTurn, false, "end-turn");
+    mkIcon("⚔️", "Attack", handlers.beginAttack, actionDone);
+    if (hero.spells?.length) mkIcon("✨", "Spell", handlers.beginSpell, actionDone);
+    mkIcon("🔍", "Loot", handlers.searchTreasure, actionDone);
+    mkIcon("🕯", "Inspect", handlers.searchTraps, actionDone);
+    if (HEROES[hero.id].trait === "disarm") mkIcon("🔧", "Disarm", handlers.beginDisarm, actionDone);
+    if (hero.potions.length) mkIcon("🧪", "Potion", handlers.drinkPotion, state.turn.over);
+    mkIcon("⏭", "End", handlers.endTurn, false, "end-turn");
   }
 
   function renderLog(state) {

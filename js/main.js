@@ -19,7 +19,7 @@ let quest = null;
 let models = {};
 let state = null;        // αντίγραφο για render (host: το αυθεντικό)
 let view = null;
-let uiMode = { selecting: null }; // "attack" | "spell:xxx" | "disarm" | null
+let uiMode = { selecting: null, pendingMove: null }; // selecting: "attack"|"spell:x"|"disarm"; pendingMove: {x,y,path}
 
 const myName = () => (ui.el.nameInput.value || "Hero").trim().slice(0, 14);
 
@@ -170,7 +170,10 @@ async function onStateReceived(newState, fx = {}) {
   ui.renderTurnBar(renderState, mySeat);
   ui.renderHeroCard(renderState, mySeat);
   ui.renderLog(renderState);
-  if (fx.lastDice) ui.showCombatDice(fx.lastDice);
+  if (fx.lastDice) {
+    ui.showCombatDice(fx.lastDice);
+    if (fx.lastDice.attackerKey) view.playAttack(fx.lastDice.attackerKey, fx.lastDice.defenderKey);
+  }
   else if (fx.lastRoll) ui.showMoveDice(fx.lastRoll);
   if (fx.lastCard) ui.showCard(fx.lastCard);
   ui.maybeShowTurnBanner(renderState, mySeat);
@@ -206,6 +209,7 @@ async function enterGame() {
 
 // ---------- Ενέργειες παίκτη ----------
 function issue(cmd, args) {
+  uiMode.pendingMove = null;
   if (isHost) hostApply(mySeat, cmd, args);
   else net.send({ type: "command", seat: mySeat, cmd, args });
 }
@@ -231,6 +235,10 @@ const handlers = {
     });
   },
   cancelSelect: () => { uiMode.selecting = null; refreshActions(state); highlightForMode(state); },
+  confirmMove: () => {
+    if (uiMode.pendingMove) issue("move", { path: uiMode.pendingMove.path });
+  },
+  cancelMove: () => { uiMode.pendingMove = null; refreshActions(state); highlightForMode(state); },
 };
 
 function myHero() {
@@ -273,6 +281,9 @@ function highlightForMode(s) {
       .filter((t) => t.cell && s.traps[t.id].revealed && !s.traps[t.id].disarmed && !s.traps[t.id].triggered)
       .map((t) => key(t.cell[0], t.cell[1]));
     view.setHighlights(cells, 0xffcc44);
+  } else if (uiMode.pendingMove) {
+    // Προεπισκόπηση διαδρομής: χρυσό μονοπάτι, tap ξανά ή ✓ για εκτέλεση
+    view.setHighlights(uiMode.pendingMove.path.map(([px, py]) => key(px, py)), 0xffd24a);
   } else if (s.turn.moveRoll && !s.turn.over) {
     const board = buildBoard(s.quest);
     const left = s.turn.moveRoll[0] + s.turn.moveRoll[1] - s.turn.moved;
@@ -320,14 +331,36 @@ function onCellTap({ x, y }) {
     }
   }
 
-  // Κίνηση
+  // Tap σε σεντούκι → άνοιγμα (search) με καθοδήγηση αν δεν γίνεται
+  const chest = (state.quest.furniture || []).find(
+    (f) => f.type === "chest" && f.cell[0] === x && f.cell[1] === y && state.revealed[f.area]
+  );
+  if (chest) {
+    const board = buildBoard(state.quest);
+    const heroArea = areaAt(board, hero.x, hero.y);
+    const monstersHere = Object.values(state.monsters).some((m) => m.alive && m.area === chest.area);
+    if (heroArea !== chest.area) ui.toast("Move into the room to open the chest.");
+    else if (monstersHere) ui.toast("Clear the monsters before searching!");
+    else if (hero.searchedTreasure.includes(chest.area)) ui.toast("You already searched this room.");
+    else if (state.turn.actionUsed || state.turn.over) ui.toast("Your action is spent this turn.");
+    else issue("searchTreasure");
+    return;
+  }
+
+  // Κίνηση με επιβεβαίωση: 1ο tap = προεπισκόπηση, 2ο tap στο ίδιο κελί = εκτέλεση
   if (!state.turn.moveRoll || state.turn.over) return;
+  if (uiMode.pendingMove && uiMode.pendingMove.x === x && uiMode.pendingMove.y === y) {
+    issue("move", { path: uiMode.pendingMove.path });
+    return;
+  }
   const board = buildBoard(state.quest);
   const left = state.turn.moveRoll[0] + state.turn.moveRoll[1] - state.turn.moved;
   const { stops, prev } = reachableCells(board, state, hero, left);
-  if (!stops.has(key(x, y))) return;
+  if (!stops.has(key(x, y))) { uiMode.pendingMove = null; refreshActions(state); highlightForMode(state); return; }
   const path = pathTo(prev, hero.x, hero.y, x, y);
-  issue("move", { path });
+  uiMode.pendingMove = { x, y, path };
+  refreshActions(state);
+  highlightForMode(state);
 }
 
 // ---------- AI wiring (host) ----------
@@ -346,7 +379,10 @@ function monsterAttack(s, monster, hero, dice) {
   const shields = def.filter((f) => f === "white").length;
   const damage = Math.max(0, skulls - shields);
   const atkName = MONSTERS[monster.type].name;
-  s.lastDice = { attacker: atkName, defender: HEROES[hero.id].name, atk, def, shieldFace: "white", damage };
+  s.lastDice = {
+    attacker: atkName, defender: HEROES[hero.id].name, atk, def, shieldFace: "white", damage,
+    attackerKey: `mob_${monster.id}`, defenderKey: `hero_${hero.id}`,
+  };
   s.log.push({ t: "combat", text: `${atkName} ⚔ ${HEROES[hero.id].name}: ${skulls} skulls vs ${shields} shields → ${damage} damage.` });
   if (damage > 0) {
     hero.body = Math.max(0, hero.body - damage);

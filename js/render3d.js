@@ -113,6 +113,7 @@ export class BoardView {
 
     this.zoom = 1;
     this.panOffset = new THREE.Vector2(0, 0);
+    this.panTarget = new THREE.Vector2(0, 0);
 
     this.#buildStatic();
     this.#setupGestures(container);
@@ -137,9 +138,9 @@ export class BoardView {
     this.camera.lookAt(target.x, 0, target.z);
   }
 
+  // Ομαλό ταξίδι κάμερας: θέτουμε μόνο στόχο, το animate() κάνει lerp
   focusCell(x, y) {
-    this.panOffset.set(x + 0.5 - this.center.x, y + 0.5 - this.center.z);
-    this.#updateCamera();
+    this.panTarget.set(x + 0.5 - this.center.x, y + 0.5 - this.center.z);
   }
 
   #setupGestures(container) {
@@ -164,6 +165,7 @@ export class BoardView {
         if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
         this.panOffset.x -= dx * 0.02 / this.zoom;
         this.panOffset.y -= dy * 0.02 / this.zoom;
+        this.panTarget.copy(this.panOffset);
         touches.set(t.identifier, { x: t.clientX, y: t.clientY });
         this.#updateCamera();
       } else if (touches.size === 2) {
@@ -270,12 +272,12 @@ export class BoardView {
           : (checker ? COLORS.corridor : COLORS.corridorDark);
         const mat = new THREE.MeshLambertMaterial({
           map: isRoom ? this.textures.stoneA : this.textures.stoneB,
-          color: baseColor,
+          color: COLORS.hidden,
         });
         const tile = new THREE.Mesh(tileGeo, mat);
         tile.position.set(x + 0.5, -0.06, y + 0.5);
         tile.rotation.y = (Math.PI / 2) * ((x * 3 + y * 5) % 4); // δωρεάν ποικιλία υφής
-        tile.userData = { x, y, baseColor };
+        tile.userData = { x, y, baseColor, targetColor: new THREE.Color(COLORS.hidden) };
         this.scene.add(tile);
         this.tileMeshes.set(key(x, y), tile);
       }
@@ -300,6 +302,7 @@ export class BoardView {
       mesh.position.set(f.cell[0] + 0.5, 0, f.cell[1] + 0.5);
       mesh.userData.areaId = f.area;
       mesh.userData.isFurniture = true;
+      mesh.userData.kind = f.type;
       this.scene.add(mesh);
       this.pieces.set(`furn_${f.cell.join("_")}`, mesh);
     }
@@ -362,30 +365,43 @@ export class BoardView {
         visible = door.between.some((a) => state.revealed[a]) &&
           (!door.secret || state.doors[door.id].revealed);
       }
-      tile.material.color.setHex(visible ? tile.userData.baseColor : COLORS.hidden);
+      tile.userData.targetColor.setHex(visible ? tile.userData.baseColor : COLORS.hidden);
 
       // Δείκτης αποκαλυμμένης παγίδας
       const trap = (this.quest.traps || []).find((t) => t.cell && t.cell[0] === x && t.cell[1] === y);
       if (trap && visible) {
         const ts = state.traps[trap.id];
-        if (ts.revealed && !ts.disarmed && !ts.triggered) tile.material.color.setHex(COLORS.danger);
-        if (ts.triggered && trap.type === "pit") tile.material.color.setHex(0x191420);
+        if (ts.revealed && !ts.disarmed && !ts.triggered) tile.userData.targetColor.setHex(COLORS.danger);
+        if (ts.triggered && trap.type === "pit") tile.userData.targetColor.setHex(0x191420);
       }
     }
 
-    // Πόρτες: κρυφές μυστικές αόρατες, ανοιχτές: γυρνάνε/χαμηλώνουν
+    // Πόρτες: όταν ανοίγουν βυθίζονται στο πάτωμα με animation
     for (const door of this.quest.doors) {
       const mesh = this.doorMeshes.get(door.id);
       const ds = state.doors[door.id];
       const nearRevealed = door.between.some((a) => state.revealed[a]);
-      mesh.visible = nearRevealed && (!door.secret || ds.revealed) && !ds.open;
+      if (!ds.open) {
+        mesh.visible = nearRevealed && (!door.secret || ds.revealed);
+        mesh.position.y = 0;
+      } else if (mesh.visible && !mesh.userData.sunk && !mesh.userData.sinking) {
+        mesh.userData.sinking = true;
+      }
     }
 
-    // Έπιπλα: ορατά μόνο σε αποκαλυμμένες περιοχές
+    // Έπιπλα: ορατά σε αποκαλυμμένες περιοχές· τα σεντούκια λάμπουν όταν ανοίγουν
+    const activeHero = state.heroes[state.turnOrder[state.turnIndex]];
     for (const [id, mesh] of this.pieces) {
-      if (mesh.userData.isFurniture) {
-        mesh.visible = !!state.revealed[mesh.userData.areaId];
-      }
+      if (!mesh.userData.isFurniture) continue;
+      mesh.visible = !!state.revealed[mesh.userData.areaId];
+      if (mesh.userData.kind === "chest" && activeHero?.alive) {
+        const area = mesh.userData.areaId;
+        const heroHere = areaAt(this.board, activeHero.x, activeHero.y) === area;
+        const monstersHere = Object.values(state.monsters)
+          .some((m) => m.alive && m.area === area);
+        const searched = activeHero.searchedTreasure?.includes(area);
+        mesh.userData.glowing = mesh.visible && heroHere && !monstersHere && !searched;
+      } else mesh.userData.glowing = false;
     }
 
     // Ήρωες
@@ -393,6 +409,7 @@ export class BoardView {
       let piece = this.pieces.get(`hero_${hero.id}`);
       if (!piece) {
         piece = this.#miniFor(hero, true);
+        piece.position.set(hero.x + 0.5, 4 + Math.random() * 2, hero.y + 0.5);
         this.scene.add(piece);
         this.pieces.set(`hero_${hero.id}`, piece);
       }
@@ -405,6 +422,7 @@ export class BoardView {
       let piece = this.pieces.get(`mob_${monster.id}`);
       if (!piece) {
         piece = this.#miniFor(monster, false);
+        piece.position.set(monster.x + 0.5, 3.5 + Math.random() * 2, monster.y + 0.5);
         this.scene.add(piece);
         this.pieces.set(`mob_${monster.id}`, piece);
       }
@@ -416,6 +434,19 @@ export class BoardView {
 
   setLantern(x, y) {
     this.lanternTarget = new THREE.Vector3(x + 0.5, 2.1, y + 0.5);
+  }
+
+  // Lunge: ο επιτιθέμενος ορμάει προς τον στόχο, ο στόχος τραντάζεται·
+  // το lerp προς το targetPos τους επαναφέρει ομαλά.
+  playAttack(attackerKey, defenderKey) {
+    const atk = this.pieces.get(attackerKey);
+    const def = this.pieces.get(defenderKey);
+    if (!atk || !def) return;
+    const dir = def.position.clone().sub(atk.position).setY(0).normalize();
+    atk.position.add(dir.multiplyScalar(0.5));
+    atk.position.y += 0.15;
+    def.position.add(dir.clone().multiplyScalar(0.35));
+    def.position.y += 0.22;
   }
 
   // Παίξε κίνηση κελί-κελί: η μινιατούρα χοροπηδάει σε κάθε βήμα του path
@@ -433,15 +464,15 @@ export class BoardView {
     for (const k of cells) {
       const tile = this.tileMeshes.get(k);
       if (!tile) continue;
-      tile.userData.savedColor = tile.material.color.getHex();
-      tile.material.color.setHex(color);
+      tile.userData.savedColor = tile.userData.targetColor.getHex();
+      tile.userData.targetColor.setHex(color);
       this.highlights.push(tile);
     }
   }
 
   clearHighlights() {
     for (const tile of this.highlights) {
-      if (tile.userData.savedColor !== undefined) tile.material.color.setHex(tile.userData.savedColor);
+      if (tile.userData.savedColor !== undefined) tile.userData.targetColor.setHex(tile.userData.savedColor);
     }
     this.highlights = [];
   }
@@ -489,6 +520,44 @@ export class BoardView {
     }
     if (this.lanternTarget) this.lantern.position.lerp(this.lanternTarget, Math.min(1, dt * 5));
     this.lantern.intensity = 17 + Math.sin(this.time * 7) * 2.2;
+
+    // Ομαλή κάμερα
+    if (this.panOffset.distanceToSquared(this.panTarget) > 0.0004) {
+      this.panOffset.lerp(this.panTarget, Math.min(1, dt * 4.5));
+      this.#updateCamera();
+    }
+
+    // Fade χρωμάτων στα tiles (fog reveal, highlights, παγίδες)
+    for (const tile of this.tileMeshes.values()) {
+      if (!tile.material.color.equals(tile.userData.targetColor)) {
+        tile.material.color.lerp(tile.userData.targetColor, Math.min(1, dt * 7));
+      }
+    }
+
+    // Πόρτες που βυθίζονται
+    for (const mesh of this.doorMeshes.values()) {
+      if (mesh.userData.sinking) {
+        mesh.position.y -= dt * 1.6;
+        if (mesh.position.y < -1.5) {
+          mesh.visible = false;
+          mesh.userData.sinking = false;
+          mesh.userData.sunk = true;
+        }
+      }
+    }
+
+    // Παλμός στα ανοίξιμα σεντούκια
+    for (const mesh of this.pieces.values()) {
+      if (!mesh.userData.isFurniture) continue;
+      if (mesh.userData.glowing) {
+        const pulse = 1 + Math.sin(this.time * 5) * 0.07;
+        mesh.scale.setScalar(pulse);
+        mesh.position.y = Math.abs(Math.sin(this.time * 5)) * 0.06;
+      } else if (mesh.scale.x !== 1) {
+        mesh.scale.setScalar(1);
+        mesh.position.y = 0;
+      }
+    }
     this.renderer.render(this.scene, this.camera);
   }
 }

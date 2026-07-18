@@ -192,7 +192,11 @@ function resolveAttack(s, attacker, defender, attackDice, attackerIsMonster) {
 
   const atkName = attackerIsMonster ? MONSTERS[attacker.type].name : HEROES[attacker.id].name;
   const defName = defenderIsHero ? HEROES[defender.id].name : MONSTERS[defender.type].name;
-  s.lastDice = { attacker: atkName, defender: defName, atk, def, shieldFace, damage };
+  s.lastDice = {
+    attacker: atkName, defender: defName, atk, def, shieldFace, damage,
+    attackerKey: attackerIsMonster ? `mob_${attacker.id}` : `hero_${attacker.id}`,
+    defenderKey: defenderIsHero ? `hero_${defender.id}` : `mob_${defender.id}`,
+  };
   pushLog(s, `${atkName} ⚔ ${defName}: ${skulls} skulls vs ${shields} shields → ${damage} damage.`, "combat");
 
   if (damage > 0) {
