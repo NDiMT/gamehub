@@ -302,6 +302,86 @@
         18
       ],
       "area": "entry"
+    },
+    {
+      "type": "barrel",
+      "cell": [
+        9,
+        19
+      ],
+      "area": "entry"
+    },
+    {
+      "type": "barrel",
+      "cell": [
+        5,
+        5
+      ],
+      "area": "guard"
+    },
+    {
+      "type": "bones",
+      "cell": [
+        1,
+        8
+      ],
+      "area": "guard"
+    },
+    {
+      "type": "sarcophagus",
+      "cell": [
+        13,
+        8
+      ],
+      "area": "crypt"
+    },
+    {
+      "type": "bones",
+      "cell": [
+        9,
+        5
+      ],
+      "area": "crypt"
+    },
+    {
+      "type": "bookshelf",
+      "cell": [
+        5,
+        12
+      ],
+      "area": "vault"
+    },
+    {
+      "type": "altar",
+      "cell": [
+        11,
+        12
+      ],
+      "area": "ritual"
+    },
+    {
+      "type": "bones",
+      "cell": [
+        9,
+        15
+      ],
+      "area": "ritual"
+    },
+    {
+      "type": "pillar",
+      "cell": [
+        4,
+        1
+      ],
+      "area": "boss"
+    },
+    {
+      "type": "pillar",
+      "cell": [
+        10,
+        1
+      ],
+      "area": "boss"
     }
   ],
   "traps": [

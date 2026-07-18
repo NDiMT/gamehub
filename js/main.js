@@ -252,6 +252,7 @@ function refreshActions(s) {
 function highlightForMode(s) {
   if (!view || !s) return;
   view.clearHighlights();
+  if (!uiMode.pendingMove) view.clearDestMarker();
   const activeId = s.turnOrder[s.turnIndex];
   const hero = s.heroes[activeId];
   if (hero.seat !== mySeat || s.phase !== "playing") return;
@@ -282,14 +283,23 @@ function highlightForMode(s) {
       .map((t) => key(t.cell[0], t.cell[1]));
     view.setHighlights(cells, 0xffcc44);
   } else if (uiMode.pendingMove) {
-    // Προεπισκόπηση διαδρομής: χρυσό μονοπάτι, tap ξανά ή ✓ για εκτέλεση
+    // Προεπισκόπηση διαδρομής: χρυσό μονοπάτι + δαχτυλίδι στον προορισμό
     view.setHighlights(uiMode.pendingMove.path.map(([px, py]) => key(px, py)), 0xffd24a);
+    view.setDestMarker(uiMode.pendingMove.x, uiMode.pendingMove.y);
   } else if (s.turn.moveRoll && !s.turn.over) {
     const board = buildBoard(s.quest);
     const left = s.turn.moveRoll[0] + s.turn.moveRoll[1] - s.turn.moved;
     if (left > 0) {
       const { stops } = reachableCells(board, s, hero, left);
-      view.setHighlights([...stops]);
+      // Δείξε μόνο ό,τι είναι ήδη αποκαλυμμένο — όχι spoilers μέσα στο fog
+      const visibleStops = [...stops].filter((k) => {
+        const [cx, cy] = k.split(",").map(Number);
+        const area = areaAt(board, cx, cy);
+        if (area) return !!s.revealed[area];
+        const door = board.doorAt.get(k);
+        return door && door.between.some((a) => s.revealed[a]);
+      });
+      view.setHighlights(visibleStops, 0xcfb46a);
     }
   }
 }

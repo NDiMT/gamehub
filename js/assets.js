@@ -8,10 +8,16 @@ const TARGET_HEIGHT = {
   hero_warrior: 1.15, hero_sapper: 1.05, hero_shadowarcher: 1.15, hero_mystic: 1.15,
   mob_grunt: 0.9, mob_hollow: 1.05, mob_acolyte: 1.1, boss_stonewrath: 1.6,
   prop_door: 1.5, prop_chest: 0.6, prop_stairs: 1.0,
+  prop_pillar: 1.7, prop_sarcophagus: 0.8, prop_altar: 1.0,
+  prop_bookshelf: 1.5, prop_barrel: 0.75, prop_bones: 0.28,
 };
 
 // Props: πρέπει να χωράνε και στο κελί τους (1x1), όχι μόνο σε ύψος
-const MAX_FOOTPRINT = { prop_door: 1.0, prop_chest: 0.85, prop_stairs: 0.95 };
+const MAX_FOOTPRINT = {
+  prop_door: 1.0, prop_chest: 0.85, prop_stairs: 0.95,
+  prop_pillar: 0.7, prop_sarcophagus: 0.95, prop_altar: 0.9,
+  prop_bookshelf: 0.95, prop_barrel: 0.7, prop_bones: 0.95,
+};
 
 export async function loadMinis() {
   const models = {};
@@ -76,7 +82,42 @@ export function fallbackMini(color, height = 1, isBoss = false) {
 
 export function fallbackProp(kind) {
   const g = new THREE.Group();
-  if (kind === "prop_chest") {
+  if (kind === "prop_pillar") {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 1.6, 8),
+      new THREE.MeshLambertMaterial({ color: 0x8a8294 }));
+    m.position.y = 0.8;
+    g.add(m);
+  } else if (kind === "prop_sarcophagus") {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.55),
+      new THREE.MeshLambertMaterial({ color: 0x9a92a4 }));
+    m.position.y = 0.28;
+    g.add(m);
+  } else if (kind === "prop_altar") {
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.5),
+      new THREE.MeshLambertMaterial({ color: 0x4a3a50 }));
+    base.position.y = 0.35;
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 0.6),
+      new THREE.MeshLambertMaterial({ color: 0x3a2a40 }));
+    top.position.y = 0.75;
+    g.add(base, top);
+  } else if (kind === "prop_bookshelf") {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.35),
+      new THREE.MeshLambertMaterial({ color: 0x5a4028 }));
+    m.position.y = 0.7;
+    g.add(m);
+  } else if (kind === "prop_barrel") {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.7, 10),
+      new THREE.MeshLambertMaterial({ color: 0x6a4a2a }));
+    m.position.y = 0.35;
+    g.add(m);
+  } else if (kind === "prop_bones") {
+    for (let i = 0; i < 5; i++) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.08 + (i % 3) * 0.03, 6, 6),
+        new THREE.MeshLambertMaterial({ color: 0xd8d2c0 }));
+      b.position.set((i - 2) * 0.14, 0.07, ((i * 7) % 3 - 1) * 0.14);
+      g.add(b);
+    }
+  } else if (kind === "prop_chest") {
     const m = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.45, 0.45),
       new THREE.MeshLambertMaterial({ color: 0x7a5230 }));
     m.position.y = 0.22;

@@ -7,11 +7,20 @@ import { fallbackMini, fallbackProp } from "./assets.js";
 // picking κελιών/μινιατούρων. Διαβάζει το state και συγχρονίζει τη σκηνή.
 
 const TILE = 1;
+// Παλέτα ανά δωμάτιο: κάθε χώρος έχει τη δική του απόχρωση πέτρας
+const ROOM_TINTS = {
+  entry:  { light: 0xcdbfa8, dark: 0xbcae97 },   // ζεστό αμμόχρωμα
+  guard:  { light: 0xb9c2a4, dark: 0xa8b193 },   // βρύο/πράσινο
+  crypt:  { light: 0xb4bac4, dark: 0xa3a9b3 },   // ψυχρό γκριζογάλανο
+  vault:  { light: 0xc4b4c8, dark: 0xb3a3b7 },   // μωβ σκόνη
+  ritual: { light: 0xc9ada4, dark: 0xb89c93 },   // ξεθωριασμένο αίμα
+  boss:   { light: 0xa89a8a, dark: 0x978979 },   // σκοτεινή γη
+};
 const COLORS = {
   room: 0xcdbfa8, roomDark: 0xbcae97,
   corridor: 0x9d968b, corridorDark: 0x8f887d,
   wall: 0x6e6577, wallTop: 0x4a4054,
-  highlight: 0x66ffcc, danger: 0xff5566, hidden: 0x14101e,
+  highlight: 0xcfb46a, danger: 0xc65a4a, hidden: 0x14101e,
   table: 0x6b4a2a, frame: 0x3d2a16,
 };
 
@@ -91,7 +100,7 @@ export class BoardView {
     this.scene.background = new THREE.Color(0x0b0812);
     this.scene.fog = new THREE.Fog(0x0b0812, 24, 44);
     this.textures = {
-      stoneA: stoneTexture(1), stoneB: stoneTexture(7), wood: woodTexture(),
+      stoneA: stoneTexture(1), stoneB: stoneTexture(7), stoneC: stoneTexture(23), wood: woodTexture(),
     };
     this.flames = [];
     this.time = 0;
@@ -254,9 +263,13 @@ export class BoardView {
           // τοίχος — μικρή τυχαία διακύμανση ύψους για «ερειπωμένο» look
           if (this.#nearFloor(x, y)) {
             const h = 1.0 + ((x * 7 + y * 13) % 5) * 0.06;
+            const mossy = ((x * 11 + y * 23) % 6) === 0;
             const wall = new THREE.Mesh(
               new THREE.BoxGeometry(TILE, h, TILE),
-              new THREE.MeshLambertMaterial({ map: this.textures.stoneB, color: COLORS.wall })
+              new THREE.MeshLambertMaterial({
+                map: this.textures.stoneB,
+                color: mossy ? 0x5e6b58 : COLORS.wall,
+              })
             );
             wall.position.set(x + 0.5, h / 2, y + 0.5);
             this.scene.add(wall);
@@ -267,11 +280,15 @@ export class BoardView {
         const areaDef = this.quest.areas.find((a) => a.id === area);
         const isRoom = areaDef?.type === "room";
         const checker = (x + y) % 2 === 0;
+        const tint = ROOM_TINTS[area];
         const baseColor = door ? COLORS.corridor
+          : isRoom && tint ? (checker ? tint.light : tint.dark)
           : isRoom ? (checker ? COLORS.room : COLORS.roomDark)
           : (checker ? COLORS.corridor : COLORS.corridorDark);
+        // ~15% των πλακών παίρνουν την πιο ραγισμένη υφή για φθαρμένο δάπεδο
+        const cracked = ((x * 13 + y * 29) % 7) === 0;
         const mat = new THREE.MeshLambertMaterial({
-          map: isRoom ? this.textures.stoneA : this.textures.stoneB,
+          map: cracked ? this.textures.stoneC : isRoom ? this.textures.stoneA : this.textures.stoneB,
           color: COLORS.hidden,
         });
         const tile = new THREE.Mesh(tileGeo, mat);
@@ -294,12 +311,12 @@ export class BoardView {
       this.doorMeshes.set(door.id, mesh);
     }
 
-    // Έπιπλα
+    // Έπιπλα & decor props
     for (const f of this.quest.furniture || []) {
-      const kind = f.type === "chest" ? "prop_chest" : f.type === "stairs" ? "prop_stairs" : null;
-      if (!kind) continue;
+      const kind = `prop_${f.type}`;
       const mesh = this.models[kind] ? this.models[kind].clone() : fallbackProp(kind);
       mesh.position.set(f.cell[0] + 0.5, 0, f.cell[1] + 0.5);
+      mesh.rotation.y = (Math.PI / 2) * ((f.cell[0] + f.cell[1] * 3) % 4);
       mesh.userData.areaId = f.area;
       mesh.userData.isFurniture = true;
       mesh.userData.kind = f.type;
@@ -436,6 +453,23 @@ export class BoardView {
     this.lanternTarget = new THREE.Vector3(x + 0.5, 2.1, y + 0.5);
   }
 
+  // Δαχτυλίδι-στόχος στο κελί προορισμού (move preview)
+  setDestMarker(x, y) {
+    if (!this.destMarker) {
+      this.destMarker = new THREE.Mesh(
+        new THREE.TorusGeometry(0.4, 0.05, 8, 24),
+        new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.9 })
+      );
+      this.destMarker.rotation.x = -Math.PI / 2;
+      this.scene.add(this.destMarker);
+    }
+    this.destMarker.position.set(x + 0.5, 0.1, y + 0.5);
+    this.destMarker.visible = true;
+  }
+  clearDestMarker() {
+    if (this.destMarker) this.destMarker.visible = false;
+  }
+
   // Lunge: ο επιτιθέμενος ορμάει προς τον στόχο, ο στόχος τραντάζεται·
   // το lerp προς το targetPos τους επαναφέρει ομαλά.
   playAttack(attackerKey, defenderKey) {
@@ -479,7 +513,13 @@ export class BoardView {
 
   // Κλήση σε κάθε frame: ολίσθηση μινιατούρων, φλόγες, φανάρι
   animate(dt) {
+    const frameStart = performance.now();
     this.time += dt;
+    if (this.destMarker?.visible) {
+      this.destMarker.rotation.z += dt * 2.4;
+      const p = 1 + Math.sin(this.time * 6) * 0.08;
+      this.destMarker.scale.set(p, p, 1);
+    }
     const HOP_SPEED = 6.5;   // κελιά / δευτερόλεπτο
     const HOP_HEIGHT = 0.32;
     for (const piece of this.pieces.values()) {
@@ -559,5 +599,28 @@ export class BoardView {
       }
     }
     this.renderer.render(this.scene, this.camera);
+
+    // Δυναμική ανάλυση: αν πέφτουν τα frames, ρίξε pixels — όχι gameplay
+    this.#sampleFrame(performance.now() - frameStart);
+  }
+
+  #sampleFrame(frameMs) {
+    this._res ??= { base: Math.min(devicePixelRatio || 1, 2), scale: 1, slow: 0, fast: 0 };
+    const r = this._res;
+    if (frameMs > 24) {
+      if (++r.slow > 40 && r.scale > 0.55) {
+        r.scale = Math.max(0.55, r.scale * 0.85);
+        this.renderer.setPixelRatio(r.base * r.scale);
+        r.slow = 0;
+      }
+      r.fast = 0;
+    } else if (frameMs < 12) {
+      if (++r.fast > 500 && r.scale < 1) {
+        r.scale = Math.min(1, r.scale * 1.1);
+        this.renderer.setPixelRatio(r.base * r.scale);
+        r.fast = 0;
+      }
+      r.slow = 0;
+    }
   }
 }

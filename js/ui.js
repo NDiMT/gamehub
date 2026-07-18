@@ -150,35 +150,91 @@ export function createUI() {
     el.log.scrollTop = el.log.scrollHeight;
   }
 
-  // ---------- Dice tray ----------
-  const dieFaceHTML = (f) =>
-    `<span class="die ${f}">${f === "skull" ? "💀" : "🛡"}</span>`;
-  const numberDieHTML = (n) => `<span class="die num">${n}</span>`;
+  // ---------- Dice tray: ζάρια ένα-ένα, με tumbling πριν «κάτσουν» ----------
+  const faceGlyph = (f) => (f === "skull" ? "💀" : "🛡");
+  const COMBAT_GLYPHS = ["💀", "🛡", "💀"];
+  const NUM_GLYPHS = ["1", "2", "3", "4", "5", "6"];
+
+  function clearTrayTimers() {
+    (el.dice._timers || []).forEach(clearTimeout);
+    (el.dice._intervals || []).forEach(clearInterval);
+    el.dice._timers = [];
+    el.dice._intervals = [];
+  }
+  const later = (fn, ms) => el.dice._timers.push(setTimeout(fn, ms));
+
+  // Ρίχνει ένα ζάρι μέσα στο set: tumbling με εναλλαγή όψεων, μετά «κάθεται»
+  function rollDieInto(setEl, finalHTML, glyphs, tumbleMs) {
+    const die = document.createElement("span");
+    die.className = "die rolling";
+    die.textContent = glyphs[0];
+    setEl.appendChild(die);
+    let gi = 0;
+    const cycle = setInterval(() => {
+      die.textContent = glyphs[++gi % glyphs.length];
+    }, 85);
+    el.dice._intervals.push(cycle);
+    later(() => {
+      clearInterval(cycle);
+      die.outerHTML = finalHTML;
+      const settled = setEl.lastElementChild;
+      settled.classList.add("settle");
+      try { navigator.vibrate?.(12); } catch { }
+    }, tumbleMs);
+  }
 
   function showCombatDice(d) {
+    clearTrayTimers();
     el.dice.innerHTML = `
       <div class="tray-row"><span class="tray-name atk">${d.attacker}</span>
-        <span class="dice-set">${d.atk.map(dieFaceHTML).join("")}</span></div>
+        <span class="dice-set" data-set="atk"></span></div>
       <div class="tray-row"><span class="tray-name def">${d.defender}</span>
-        <span class="dice-set">${d.def.map(dieFaceHTML).join("")}</span></div>
-      <div class="tray-result ${d.damage > 0 ? "hit" : "block"}">${d.damage > 0 ? `💥 ${d.damage} damage` : "🛡 Blocked!"}</div>`;
-    animateTray();
+        <span class="dice-set" data-set="def"></span></div>
+      <div class="tray-result"></div>`;
+    el.dice.classList.remove("hidden");
+
+    const atkSet = el.dice.querySelector('[data-set="atk"]');
+    const defSet = el.dice.querySelector('[data-set="def"]');
+    const seq = [
+      ...d.atk.map((f) => ({ set: atkSet, f })),
+      ...d.def.map((f) => ({ set: defSet, f })),
+    ];
+    const STEP = 340, TUMBLE = 480;
+    seq.forEach((item, i) => {
+      later(() => rollDieInto(
+        item.set,
+        `<span class="die ${item.f}">${faceGlyph(item.f)}</span>`,
+        COMBAT_GLYPHS, TUMBLE
+      ), i * STEP);
+    });
+    const total = seq.length * STEP + TUMBLE;
+    later(() => {
+      const res = el.dice.querySelector(".tray-result");
+      res.className = "tray-result show " + (d.damage > 0 ? "hit" : "block");
+      res.textContent = d.damage > 0 ? `💥 ${d.damage} damage` : "🛡 Blocked!";
+      try { navigator.vibrate?.(d.damage > 0 ? [40, 30, 60] : 25); } catch { }
+    }, total + 320);
+    later(() => el.dice.classList.add("hidden"), total + 2300);
   }
 
   function showMoveDice(roll) {
+    clearTrayTimers();
     el.dice.innerHTML = `
       <div class="tray-row"><span class="tray-name">${roll.hero} moves</span>
-        <span class="dice-set">${roll.dice.map(numberDieHTML).join("")}</span></div>
-      <div class="tray-result">${roll.dice[0] + roll.dice[1]} steps</div>`;
-    animateTray();
-  }
-
-  function animateTray() {
-    el.dice.classList.remove("hidden", "tray-in");
-    void el.dice.offsetWidth;
-    el.dice.classList.add("tray-in");
-    clearTimeout(el.dice._timer);
-    el.dice._timer = setTimeout(() => el.dice.classList.add("hidden"), 2300);
+        <span class="dice-set" data-set="mv"></span></div>
+      <div class="tray-result"></div>`;
+    el.dice.classList.remove("hidden");
+    const set = el.dice.querySelector('[data-set="mv"]');
+    roll.dice.forEach((n, i) => {
+      later(() => rollDieInto(set, `<span class="die num">${n}</span>`, NUM_GLYPHS, 420), i * 300);
+    });
+    const total = roll.dice.length * 300 + 420;
+    later(() => {
+      const res = el.dice.querySelector(".tray-result");
+      res.className = "tray-result show";
+      res.textContent = `${roll.dice[0] + roll.dice[1]} steps`;
+    }, total + 200);
+    later(() => el.dice.classList.add("hidden"), total + 1500);
   }
 
   // ---------- Treasure card ----------

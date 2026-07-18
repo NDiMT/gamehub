@@ -66,6 +66,42 @@
       "file": "assets/models/prop_stairs.glb",
       "bytes": 3816768,
       "taskId": "019f742e-b464-7b23-ba1b-81e89eee969b"
+    },
+    {
+      "name": "prop_pillar",
+      "file": "assets/models/prop_pillar.glb",
+      "bytes": 3890052,
+      "taskId": "019f75e3-9667-782e-8392-c1bfb1d045e5"
+    },
+    {
+      "name": "prop_sarcophagus",
+      "file": "assets/models/prop_sarcophagus.glb",
+      "bytes": 4098944,
+      "taskId": "019f75e3-c761-7794-8666-09862128cba5"
+    },
+    {
+      "name": "prop_altar",
+      "file": "assets/models/prop_altar.glb",
+      "bytes": 3980280,
+      "taskId": "019f75e4-2d40-7a8b-a2da-5d28d2f1110c"
+    },
+    {
+      "name": "prop_bookshelf",
+      "file": "assets/models/prop_bookshelf.glb",
+      "bytes": 3854244,
+      "taskId": "019f75e3-f918-79a6-96a9-636689a1fe21"
+    },
+    {
+      "name": "prop_barrel",
+      "file": "assets/models/prop_barrel.glb",
+      "bytes": 3668040,
+      "taskId": "019f75e4-2b8b-7840-af2f-1e9dda1ef354"
+    },
+    {
+      "name": "prop_bones",
+      "file": "assets/models/prop_bones.glb",
+      "bytes": 3041140,
+      "taskId": "019f75e4-f3eb-7abd-a04c-b0c22d5d6b68"
     }
   ],
   "failures": []
