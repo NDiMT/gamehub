@@ -24,14 +24,102 @@ export const HEROES = {
     id: "mystic", name: "Orion", title: "the Mystic",
     attack: 1, defense: 2, body: 4, mind: 6,
     color: 0x8e44ad, trait: "spells",
-    blurb: "Three spells. Fragile but decisive.",
+    blurb: "Wields three schools of magic. Fragile but decisive.",
   },
 };
 
+// Τέσσερις στοιχειακές σχολές ξορκιών — 3 ξόρκια η καθεμία, όλα μιας χρήσης.
+// Στο draft (createGame): ο mystic παίρνει 3 σχολές, ο shadowarcher 1 (αν υπάρχουν).
+export const SPELL_GROUPS = {
+  cinderflame: { id: "cinderflame", name: "Cinderflame", icon: "🔥", blurb: "Fire — raw destruction" },
+  deepcurrent: { id: "deepcurrent", name: "Deepcurrent", icon: "💧", blurb: "Water — mending and mist" },
+  skyrend: { id: "skyrend", name: "Skyrend", icon: "🌪", blurb: "Air — speed and passage" },
+  gravewrought: { id: "gravewrought", name: "Gravewrought", icon: "🪨", blurb: "Stone — ward and ruin" },
+};
+
+// target: "hero" (εαυτός ή LOS) | "monster" (LOS) | "cell" (ελεύθερο κελί) | "self" (άμεση κάστα)
+// kind: το generic dispatch στο state.js/castSpell
 export const SPELLS = {
-  heal: { id: "heal", name: "Healing Light", icon: "✨", desc: "Restore 4 Body to a hero you can see (or yourself)", target: "hero" },
-  bolt: { id: "bolt", name: "Ember Bolt", icon: "🔥", desc: "Ranged attack with 2 combat dice, needs line of sight", target: "monster" },
-  hold: { id: "hold", name: "Stone Grip", icon: "🗿", desc: "A monster you can see loses its next activation", target: "monster" },
+  // --- Cinderflame (φωτιά) ---
+  emberlance: {
+    id: "emberlance", group: "cinderflame", name: "Emberlance", icon: "🔥",
+    target: "monster", kind: "attack", dice: 3, oneUse: true,
+    desc: "Hurl a lance of white flame: attack a monster you can see with 3 combat dice.",
+  },
+  forgeheart: {
+    id: "forgeheart", group: "cinderflame", name: "Forgeheart", icon: "⚒️",
+    target: "hero", kind: "buffAtk", bonus: 2, oneUse: true,
+    desc: "Fill a hero's weapon with furnace heat: +2 attack dice on their next attack.",
+  },
+  cinderbrand: {
+    id: "cinderbrand", group: "cinderflame", name: "Cinderbrand", icon: "♨️",
+    target: "monster", kind: "burn", oneUse: true,
+    desc: "Sear a burning mark onto a monster: 1 unblockable damage now, 1 more when it next acts.",
+  },
+  // --- Deepcurrent (νερό) ---
+  tidemend: {
+    id: "tidemend", group: "deepcurrent", name: "Tidemend", icon: "💧",
+    target: "hero", kind: "heal", amount: 4, oneUse: true,
+    desc: "A wave of living water restores up to 4 Body to a hero you can see (or yourself).",
+  },
+  stillwater: {
+    id: "stillwater", group: "deepcurrent", name: "Stillwater", icon: "🫧",
+    target: "hero", kind: "cleanse", oneUse: true,
+    desc: "Wash away dread and affliction from a hero, and restore 1 Body.",
+  },
+  mistveil: {
+    id: "mistveil", group: "deepcurrent", name: "Mistveil", icon: "🌫",
+    target: "hero", kind: "veil", oneUse: true,
+    desc: "Wrap a hero in cold fog: monsters cannot single them out during the coming monster turn.",
+  },
+  // --- Skyrend (αέρας) ---
+  galestep: {
+    id: "galestep", group: "skyrend", name: "Galestep", icon: "💨",
+    target: "self", kind: "extraMove", oneUse: true,
+    desc: "The wind carries you: roll 1 extra movement die this turn.",
+  },
+  riftstride: {
+    id: "riftstride", group: "skyrend", name: "Riftstride", icon: "🌀",
+    target: "cell", kind: "blink", range: 3, oneUse: true,
+    desc: "Step through a howling gap in the air: appear on any free square within 3 — even across walls.",
+  },
+  skyhowl: {
+    id: "skyhowl", group: "skyrend", name: "Skyhowl", icon: "🌬",
+    target: "monster", kind: "push", cells: 2, oneUse: true,
+    desc: "A screaming gust hurls a monster 2 squares away; it takes 1 damage if it slams into something.",
+  },
+  // --- Gravewrought (πέτρα) ---
+  graniteshell: {
+    id: "graniteshell", group: "gravewrought", name: "Granite Shell", icon: "🛡",
+    target: "hero", kind: "defSkin", bonus: 2, oneUse: true,
+    desc: "Living stone sheathes a hero: +2 defense dice until they next take damage.",
+  },
+  gravelock: {
+    id: "gravelock", group: "gravewrought", name: "Gravelock", icon: "⛓",
+    target: "monster", kind: "hold", oneUse: true,
+    desc: "Barrow-chains of cold earth bind a monster you can see — it loses its next activation.",
+  },
+  cairnfall: {
+    id: "cairnfall", group: "gravewrought", name: "Cairnfall", icon: "🧱",
+    target: "monster", kind: "smite", dice: 2, oneUse: true,
+    desc: "Bring the ceiling down on a monster: roll 2 combat dice — every skull wounds, no defense.",
+  },
+};
+
+// Dread spells του STONEWRATH — ρίχνονται στη φάση τεράτων, max 2 φορές το καθένα.
+export const DREAD_SPELLS = {
+  wardenswail: {
+    id: "wardenswail", name: "Wail of the Warden", icon: "😱", maxUses: 2,
+    desc: "A soul-splitting scream: the target hero is shaken and rolls 1 fewer movement die next turn.",
+  },
+  risehollow: {
+    id: "risehollow", name: "Rise, Hollow", icon: "🦴", maxUses: 2,
+    desc: "A dead servant claws out of the floor beside the Warden.",
+  },
+  sigilofrot: {
+    id: "sigilofrot", name: "Sigil of Rot", icon: "🕸", maxUses: 2,
+    desc: "A withering sigil burns onto the target hero: 1 unblockable damage.",
+  },
 };
 
 export const MONSTERS = {

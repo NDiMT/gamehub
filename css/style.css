@@ -520,7 +520,13 @@ input {
   padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
   z-index: 11;
   display: flex; flex-direction: column; gap: 8px;
+  max-height: 72vh; overflow-y: auto; /* mystic: έως 9 ξόρκια + κεφαλίδες σχολών */
   animation: sheetup 0.25s ease-out;
+}
+.sheet-header {
+  color: var(--gold-hi); opacity: 0.85;
+  font-size: 0.7rem; letter-spacing: 2.5px; text-transform: uppercase;
+  margin: 6px 2px 0; border-bottom: 1px solid var(--panel-border); padding-bottom: 3px;
 }
 @keyframes sheetup { from { transform: translateY(100%); } to { transform: none; } }
 .sheet-title { text-align: center; color: var(--gold-hi); letter-spacing: 2px; font-size: 0.85rem; margin-bottom: 4px; }

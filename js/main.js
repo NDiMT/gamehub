@@ -1,7 +1,7 @@
-import { createGame, commands, advanceTurn } from "./state.js";
+import { createGame, commands, advanceTurn, blinkCells } from "./state.js";
 import { runMonsterPhase } from "./ai.js";
 import { buildBoard, reachableCells, pathTo, key, isAdjacent, lineOfSight, areaAt } from "./board.js";
-import { HEROES, BUILD } from "./config.js";
+import { HEROES, SPELLS, BUILD } from "./config.js";
 import { loadMinis } from "./assets.js";
 import { BoardView } from "./render3d.js";
 import { createUI } from "./ui.js";
@@ -270,13 +270,14 @@ async function playFxEvent(ev) {
     view.playMove(ev.key, ev.path);
     await sleep(ev.path.length * 140 + 100);
   } else if (ev.t === "roll") {
+    const steps = ev.dice.reduce((a, b) => a + b, 0); // 1-3 ζάρια (Galestep/Wail)
     if (fxFast) {
-      ui.showBanner(`👣 ${ev.dice[0] + ev.dice[1]} steps`, 900);
+      ui.showBanner(`👣 ${steps} steps`, 900);
       return sleep(300);
     }
     ui.showBanner(`🎲 ${ev.hero} rolls...`, 1000);
     await view.rollDice3D(ev.dice.map((n) => ({ kind: "num", value: n })), "move");
-    ui.showBanner(`👣 ${ev.dice[0] + ev.dice[1]} steps`, 1200);
+    ui.showBanner(`👣 ${steps} steps`, 1200);
     await sleep(450);
     view.clearDice3D();
   } else if (ev.t === "dice") {
@@ -291,8 +292,10 @@ async function playFxEvent(ev) {
     ui.showBanner(`⚔ ${ev.attacker} attacks ${ev.defender}!`, 1100);
     await sleep(700);
     await view.rollDice3D(ev.atk.map((f) => ({ kind: f })), "attack");
-    await sleep(250);
-    await view.rollDice3D(ev.def.map((f) => ({ kind: f })), "defense");
+    if (ev.def.length) { // Cairnfall: καμία άμυνα → κανένα ζάρι άμυνας
+      await sleep(250);
+      await view.rollDice3D(ev.def.map((f) => ({ kind: f })), "defense");
+    }
     await sleep(350);
     view.playAttack(ev.attackerKey, ev.defenderKey);
     try { navigator.vibrate?.(ev.damage > 0 ? [50, 40, 80] : 30); } catch { }
@@ -372,15 +375,22 @@ function targetCellsFor(s, mode) {
       .filter((t) => Math.abs(hero.x - t.cell[0]) + Math.abs(hero.y - t.cell[1]) <= 1)
       .map((t) => key(t.cell[0], t.cell[1]));
   }
-  if (mode === "spell:heal") {
-    return Object.values(s.heroes)
-      .filter((h) => h.alive && (h.id === hero.id || lineOfSight(board, s, hero.x, hero.y, h.x, h.y)))
-      .map((h) => key(h.x, h.y));
-  }
   if (mode?.startsWith("spell:")) {
-    return Object.values(s.monsters)
-      .filter((m) => m.alive && s.revealed[m.area] && lineOfSight(board, s, hero.x, hero.y, m.x, m.y))
-      .map((m) => key(m.x, m.y));
+    // Στόχευση κατά sp.target — ίδιοι κανόνες με το castSpell στο state.js
+    const sp = SPELLS[mode.split(":")[1]];
+    if (!sp) return [];
+    if (sp.target === "hero") {
+      return Object.values(s.heroes)
+        .filter((h) => h.alive && (h.id === hero.id || lineOfSight(board, s, hero.x, hero.y, h.x, h.y)))
+        .map((h) => key(h.x, h.y));
+    }
+    if (sp.target === "monster") {
+      return Object.values(s.monsters)
+        .filter((m) => m.alive && s.revealed[m.area] && lineOfSight(board, s, hero.x, hero.y, m.x, m.y))
+        .map((m) => key(m.x, m.y));
+    }
+    if (sp.target === "cell") return blinkCells(board, s, hero, sp.range || 3);
+    return []; // self: κάστα άμεσα από το sheet, χωρίς tap στο ταμπλό
   }
   return [];
 }
@@ -455,9 +465,15 @@ const handlers = {
     const hero = myHero();
     if (!hero?.spells.length) return;
     ui.showSpellSheet(hero, (spellId) => {
-      if (!targetCellsFor(state, "spell:" + spellId).length) return ui.toast("No valid target in sight.");
+      const sp = SPELLS[spellId];
+      if (!sp) return;
+      // Self ξόρκια (π.χ. Galestep): κάστα αμέσως, χωρίς στόχευση στο ταμπλό
+      if (sp.target === "self") { issue("castSpell", { spellId }); return; }
+      if (!targetCellsFor(state, "spell:" + spellId).length) {
+        return ui.toast(sp.target === "cell" ? "No free square in range." : "No valid target in sight.");
+      }
       uiMode.selecting = "spell:" + spellId;
-      ui.toast("Tap a highlighted target on the board");
+      ui.toast(sp.target === "cell" ? "Tap a highlighted square" : "Tap a highlighted target on the board");
       refreshActions(state); highlightForMode(state);
     });
   },
@@ -498,8 +514,10 @@ function highlightForMode(s) {
   if (uiMode.selecting === "attack") {
     view.setHighlights(targetCellsFor(s, "attack"), 0xff5566);
   } else if (uiMode.selecting?.startsWith("spell:")) {
-    const heal = uiMode.selecting === "spell:heal";
-    view.setHighlights(targetCellsFor(s, uiMode.selecting), heal ? 0x66ccff : 0xcc88ff);
+    // Χρώμα ανά είδος στόχου: ήρωας=γαλάζιο, κελί=πράσινο, τέρας=μωβ
+    const sp = SPELLS[uiMode.selecting.split(":")[1]];
+    const color = sp?.target === "hero" ? 0x66ccff : sp?.target === "cell" ? 0x7fe8c8 : 0xcc88ff;
+    view.setHighlights(targetCellsFor(s, uiMode.selecting), color);
   } else if (uiMode.selecting === "disarm") {
     view.setHighlights(targetCellsFor(s, "disarm"), 0xffcc44);
   } else if (uiMode.pendingMove) {
@@ -511,7 +529,7 @@ function highlightForMode(s) {
     view.setDestMarker(uiMode.pendingMove.x, uiMode.pendingMove.y);
   } else if (s.turn.moveRoll && !s.turn.over) {
     const board = buildBoard(s.quest);
-    const left = s.turn.moveRoll[0] + s.turn.moveRoll[1] - s.turn.moved;
+    const left = s.turn.moveRoll.reduce((a, b) => a + b, 0) - s.turn.moved;
     if (left > 0) {
       const { stops } = reachableCells(board, s, hero, left);
       const traps = armedTrapCells(s);
@@ -553,10 +571,15 @@ function onCellTap({ x, y }) {
         issue("disarm", { trapId: trap.id });
       } else {
         const spellId = mode.split(":")[1];
-        const targetId = spellId === "heal"
-          ? Object.values(state.heroes).find((h) => h.alive && h.x === x && h.y === y)?.id
-          : Object.values(state.monsters).find((m) => m.alive && m.x === x && m.y === y)?.id;
-        if (targetId) issue("castSpell", { spellId, targetId });
+        const sp = SPELLS[spellId];
+        if (sp?.target === "cell") {
+          issue("castSpell", { spellId, cell: [x, y] });
+        } else {
+          const targetId = sp?.target === "hero"
+            ? Object.values(state.heroes).find((h) => h.alive && h.x === x && h.y === y)?.id
+            : Object.values(state.monsters).find((m) => m.alive && m.x === x && m.y === y)?.id;
+          if (targetId) issue("castSpell", { spellId, targetId });
+        }
       }
     } else {
       ui.toast("Not a valid target — cancelled.");
@@ -625,7 +648,7 @@ function onCellTap({ x, y }) {
     return;
   }
   const board = buildBoard(state.quest);
-  const left = state.turn.moveRoll[0] + state.turn.moveRoll[1] - state.turn.moved;
+  const left = state.turn.moveRoll.reduce((a, b) => a + b, 0) - state.turn.moved;
   const { stops, prev } = reachableCells(board, state, hero, left);
   if (!stops.has(key(x, y))) { uiMode.pendingMove = null; refreshActions(state); highlightForMode(state); return; }
   const path = pathTo(prev, hero.x, hero.y, x, y);

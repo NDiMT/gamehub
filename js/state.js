@@ -2,10 +2,10 @@
 // Τρέχει ΜΟΝΟ στον host. Οι guests λαμβάνουν το state serialized.
 // Όλη η τυχαιότητα περνά από seeded RNG ώστε το παιχνίδι να είναι αναπαραγώγιμο.
 
-import { HEROES, MONSTERS, SPELLS, DIE_FACES, TREASURE_DECK, RULES } from "./config.js";
+import { HEROES, MONSTERS, SPELLS, SPELL_GROUPS, DIE_FACES, TREASURE_DECK, RULES } from "./config.js";
 import {
   buildBoard, areaAt, key, isAdjacent, lineOfSight,
-  reachableCells, cellsOfArea,
+  reachableCells, cellsOfArea, isWalkable,
 } from "./board.js";
 
 // mulberry32 — μικρό deterministic PRNG
@@ -40,8 +40,12 @@ export function createGame(quest, players, seed) {
       x, y, body: def.body, maxBody: def.body, mind: def.mind,
       attack: def.attack, defense: def.defense,
       alive: true, gold: 0, potions: [], artifacts: [],
-      spells: p.heroId === "mystic" ? Object.keys(SPELLS) : [],
+      spells: [], // γεμίζει στο draft σχολών παρακάτω (αν υπάρχει mystic)
       searchedTreasure: [], strBonus: 0, inPit: false,
+      defBonus: 0,       // Granite Shell: +ζάρια άμυνας μέχρι να φάει ζημιά
+      veiled: false,     // Mistveil: τα τέρατα τον αγνοούν στην επόμενη φάση τους
+      extraMoveDice: 0,  // Galestep: +1 ζάρι στην επόμενη ρίψη κίνησης
+      shaken: false,     // Wail of the Warden: -1 ζάρι στην επόμενη ρίψη κίνησης
     };
   });
 
@@ -60,7 +64,7 @@ export function createGame(quest, players, seed) {
   const traps = {};
   for (const t of quest.traps) traps[t.id] = { revealed: false, disarmed: false, triggered: false };
 
-  return {
+  const s = {
     seed, rngCalls: 0,
     phase: "playing", // playing | victory | defeat
     quest, // ολόκληρο το quest JSON (στους guests πάει μαζί με το state)
@@ -73,8 +77,42 @@ export function createGame(quest, players, seed) {
     },
     round: 1,
     deckExcluded: [], // ids θησαυρών που βγήκαν από την τράπουλα
+    dreadUses: {},    // πόσες φορές έριξε ο boss κάθε dread spell
     log: [{ t: "intro", text: quest.intro }],
   };
+  draftSpellSchools(s);
+  return s;
+}
+
+// Draft σχολών (αυτόματο, seeded — ανακοινώνεται με banners/log):
+// ο mystic «διαλέγει» 1 σχολή, ο shadowarcher (αν υπάρχει) 1 από τις υπόλοιπες,
+// ο mystic παίρνει όσες μένουν μέχρι 3 σχολές σύνολο. Χωρίς mystic δεν γίνεται draft.
+function draftSpellSchools(s) {
+  const mystic = s.heroes.mystic;
+  if (!mystic) return;
+  const r = rng(s);
+  const schools = Object.keys(SPELL_GROUPS);
+  const draw = () => schools.splice(Math.floor(r() * schools.length), 1)[0];
+  const spellsOf = (gid) => Object.values(SPELLS).filter((sp) => sp.group === gid).map((sp) => sp.id);
+  const label = (gid) => `${SPELL_GROUPS[gid].icon} ${SPELL_GROUPS[gid].name}`;
+
+  const mysticSchools = [draw()];
+  const archer = s.heroes.shadowarcher;
+  const archerSchool = archer ? draw() : null;
+  while (mysticSchools.length < 3 && schools.length) mysticSchools.push(draw());
+
+  mystic.spells = mysticSchools.flatMap(spellsOf);
+  pushLog(s, `✨ ${HEROES.mystic.name} attunes to ${mysticSchools.map(label).join(", ")}.`, "spell");
+  pushFx(s, {
+    t: "banner", ms: 2200,
+    text: `✨ ${HEROES.mystic.name} claims ${mysticSchools.map((g) => SPELL_GROUPS[g].name).join(" · ")}`,
+  });
+  if (archer) {
+    archer.spells = spellsOf(archerSchool);
+    pushLog(s, `🏹 ${HEROES.shadowarcher.name} attunes to ${label(archerSchool)}.`, "spell");
+    pushFx(s, { t: "banner", text: `🏹 ${HEROES.shadowarcher.name} claims ${SPELL_GROUPS[archerSchool].name}`, ms: 1800 });
+  }
+  if (schools.length) pushLog(s, `The lore of ${schools.map(label).join(", ")} stays sealed this quest.`, "spell");
 }
 
 const activeHero = (s) => s.heroes[s.turnOrder[s.turnIndex]];
@@ -195,7 +233,8 @@ export function resolveAttack(s, attacker, defender, attackDice, attackerIsMonst
 
   const defenderIsHero = !attackerIsMonster ? false : true;
   const defDice = defenderIsHero
-    ? defender.defense + (defender.artifacts?.reduce((n, a) => n + (a.defenseBonus || 0), 0) || 0) - (defender.inPit ? 1 : 0)
+    ? defender.defense + (defender.artifacts?.reduce((n, a) => n + (a.defenseBonus || 0), 0) || 0)
+      + (defender.defBonus || 0) - (defender.inPit ? 1 : 0)
     : MONSTERS[defender.type].defense;
   const def = rollCombat(r, Math.max(1, defDice));
   const shieldFace = defenderIsHero ? "white" : "black";
@@ -213,10 +252,37 @@ export function resolveAttack(s, attacker, defender, attackDice, attackerIsMonst
   pushLog(s, `${atkName} ⚔ ${defName}: ${skulls} skulls vs ${shields} shields → ${damage} damage.`, "combat");
 
   if (damage > 0) {
-    if (defenderIsHero) damageHero(s, defender, damage, atkName);
-    else damageMonster(s, defender, damage);
+    if (defenderIsHero) {
+      // Το Granite Shell σπάει με την πρώτη ζημιά
+      if (defender.defBonus) {
+        defender.defBonus = 0;
+        pushLog(s, `🪨 The stone shell around ${defName} cracks and falls away.`, "spell");
+      }
+      damageHero(s, defender, damage, atkName);
+    } else damageMonster(s, defender, damage);
   }
   return damage;
+}
+
+// Έγκυρα κελιά για Riftstride: ελεύθερο κελί περιοχής σε ακτίνα range,
+// αγνοώντας τοίχους/πόρτες. ΜΙΑ πηγή αλήθειας — τη χρησιμοποιεί και το UI targeting.
+export function blinkCells(board, s, hero, range) {
+  const furniture = new Set(
+    (s.quest.furniture || []).filter((f) => f.type !== "stairs").map((f) => f.cell.join(","))
+  );
+  const out = [];
+  for (let dy = -range; dy <= range; dy++) {
+    for (let dx = -range; dx <= range; dx++) {
+      const d = Math.abs(dx) + Math.abs(dy);
+      if (d === 0 || d > range) continue;
+      const x = hero.x + dx, y = hero.y + dy;
+      if (!areaAt(board, x, y)) continue;
+      if (furniture.has(`${x},${y}`)) continue;
+      if (heroAt(s, x, y) || monsterAt(s, x, y)) continue;
+      out.push(key(x, y));
+    }
+  }
+  return out;
 }
 
 // ---------- Εντολές ----------
@@ -224,13 +290,22 @@ export function resolveAttack(s, attacker, defender, attackDice, attackerIsMonst
 // structuredClone πριν, ώστε να στέλνει καθαρά snapshots).
 export const commands = {
   rollMove(s) {
-    if (!activeHero(s).alive || s.turn.moveRoll) return false;
+    const hero = activeHero(s);
+    if (!hero.alive || s.turn.moveRoll) return false;
     const r = rng(s);
-    const dice = [rollDie(r), rollDie(r)];
+    // Galestep δίνει +1 ζάρι, το Wail of the Warden κόβει 1 (min 1)
+    let count = RULES.movementDice + (hero.extraMoveDice || 0);
+    if (hero.shaken) count = Math.max(1, count - 1);
+    const dice = Array.from({ length: count }, () => rollDie(r));
+    if (hero.shaken) {
+      hero.shaken = false;
+      pushLog(s, `😱 ${HEROES[hero.id].name} is still shaken by the Warden's wail — 1 fewer die.`, "spell");
+    }
+    hero.extraMoveDice = 0;
     s.turn.moveRoll = dice;
     s.turn.moved = 0;
-    pushFx(s, { t: "roll", hero: HEROES[activeHero(s).id].name, dice });
-    pushLog(s, `${HEROES[activeHero(s).id].name} rolls movement: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, "roll");
+    pushFx(s, { t: "roll", hero: HEROES[hero.id].name, dice });
+    pushLog(s, `${HEROES[hero.id].name} rolls movement: ${dice.join(" + ")} = ${dice.reduce((a, b) => a + b, 0)}.`, "roll");
     return true;
   },
 
@@ -238,7 +313,7 @@ export const commands = {
     const board = buildBoard(s.quest);
     const hero = activeHero(s);
     if (!hero.alive || s.turn.over || !s.turn.moveRoll) return false;
-    const movesLeft = s.turn.moveRoll[0] + s.turn.moveRoll[1] - s.turn.moved;
+    const movesLeft = s.turn.moveRoll.reduce((a, b) => a + b, 0) - s.turn.moved;
     if (!Array.isArray(path) || path.length === 0 || path.length > movesLeft) return false;
 
     // Επικύρωση: το μονοπάτι πρέπει να είναι μέσα στα εφικτά κελιά
@@ -302,29 +377,149 @@ export const commands = {
     return true;
   },
 
-  castSpell(s, { spellId, targetId }) {
+  // Generic dispatch πάνω στα SPELLS defs (target/kind στο config.js).
+  // targetId: ήρωας ή τέρας ανάλογα με sp.target · cell: [x,y] για kind "blink".
+  castSpell(s, { spellId, targetId, cell }) {
     const board = buildBoard(s.quest);
     const hero = activeHero(s);
     if (!hero.alive || s.turn.actionUsed || s.turn.over) return false;
     if (!hero.spells.includes(spellId)) return false;
+    const sp = SPELLS[spellId];
+    if (!sp) return false;
 
-    if (spellId === "heal") {
-      const target = s.heroes[targetId];
-      if (!target?.alive) return false;
-      if (target !== hero && !lineOfSight(board, s, hero.x, hero.y, target.x, target.y)) return false;
-      target.body = Math.min(target.maxBody, target.body + 4);
-      pushLog(s, `✨ ${SPELLS.heal.name}: ${HEROES[target.id].name} → ${target.body} Body.`, "spell");
-    } else if (spellId === "bolt") {
-      const target = s.monsters[targetId];
-      if (!target?.alive || !lineOfSight(board, s, hero.x, hero.y, target.x, target.y)) return false;
-      pushLog(s, `✨ ${SPELLS.bolt.name}!`, "spell");
-      resolveAttack(s, hero, target, 2, false);
-    } else if (spellId === "hold") {
-      const target = s.monsters[targetId];
-      if (!target?.alive || !lineOfSight(board, s, hero.x, hero.y, target.x, target.y)) return false;
-      target.held = true;
-      pushLog(s, `✨ ${SPELLS.hold.name}: the ${MONSTERS[target.type].name} freezes!`, "spell");
-    } else return false;
+    const los = (x, y) => lineOfSight(board, s, hero.x, hero.y, x, y);
+    let tHero = null, tMon = null;
+    if (sp.target === "hero") {
+      tHero = s.heroes[targetId];
+      if (!tHero?.alive) return false;
+      if (tHero !== hero && !los(tHero.x, tHero.y)) return false;
+    } else if (sp.target === "monster") {
+      tMon = s.monsters[targetId];
+      if (!tMon?.alive || !s.revealed[tMon.area] || !los(tMon.x, tMon.y)) return false;
+    } else if (sp.target === "cell") {
+      if (!Array.isArray(cell)) return false;
+      if (!blinkCells(board, s, hero, sp.range || 3).includes(key(cell[0], cell[1]))) return false;
+    }
+
+    pushLog(s, `✨ ${HEROES[hero.id].name} casts ${sp.name}!`, "spell");
+
+    switch (sp.kind) {
+      case "attack": // Emberlance: κανονική επίθεση με sp.dice ζάρια
+        resolveAttack(s, hero, tMon, sp.dice, false);
+        break;
+
+      case "smite": { // Cairnfall: κάθε νεκροκεφαλή πληγώνει, χωρίς άμυνα
+        const r = rng(s);
+        const atk = rollCombat(r, sp.dice);
+        const dmg = atk.filter((f) => f === "skull").length;
+        pushFx(s, {
+          t: "dice", attacker: HEROES[hero.id].name, defender: MONSTERS[tMon.type].name,
+          atk, def: [], shieldFace: "black", damage: dmg,
+          attackerKey: `hero_${hero.id}`, defenderKey: `mob_${tMon.id}`,
+        });
+        pushLog(s, `🧱 Rubble crashes down on the ${MONSTERS[tMon.type].name}: ${dmg} unblockable damage.`, "combat");
+        if (dmg > 0) damageMonster(s, tMon, dmg);
+        break;
+      }
+
+      case "burn": // Cinderbrand: 1 τώρα + 1 στην επόμενη ενεργοποίησή του
+        pushFx(s, { t: "banner", text: `♨️ The ${MONSTERS[tMon.type].name} is branded with living embers!`, ms: 1500 });
+        tMon.burn = (tMon.burn || 0) + 1;
+        damageMonster(s, tMon, 1);
+        break;
+
+      case "buffAtk": // Forgeheart
+        tHero.strBonus = sp.bonus;
+        pushLog(s, `⚒ ${HEROES[tHero.id].name}'s weapon glows furnace-hot (+${sp.bonus} attack dice).`, "spell");
+        break;
+
+      case "heal": // Tidemend
+        tHero.body = Math.min(tHero.maxBody, tHero.body + sp.amount);
+        pushLog(s, `💧 ${HEROES[tHero.id].name} is mended → ${tHero.body} Body.`, "spell");
+        break;
+
+      case "cleanse": { // Stillwater: διώχνει το shaken + 1 Body
+        const hadDread = tHero.shaken;
+        tHero.shaken = false;
+        tHero.body = Math.min(tHero.maxBody, tHero.body + 1);
+        pushLog(s, `🫧 Clear water washes over ${HEROES[tHero.id].name}${hadDread ? " — the dread lifts" : ""} → ${tHero.body} Body.`, "spell");
+        break;
+      }
+
+      case "veil": // Mistveil
+        tHero.veiled = true;
+        pushLog(s, `🌫 Fog swallows ${HEROES[tHero.id].name} — monsters cannot single them out.`, "spell");
+        break;
+
+      case "extraMove": { // Galestep: +1 ζάρι τώρα ή στην επόμενη ρίψη
+        if (s.turn.moveRoll) {
+          const r = rng(s);
+          const die = rollDie(r);
+          s.turn.moveRoll.push(die);
+          pushFx(s, { t: "banner", text: `💨 Galestep! +${die} movement`, ms: 1400 });
+          pushLog(s, `💨 The wind lifts ${HEROES[hero.id].name}: +${die} movement.`, "spell");
+        } else {
+          hero.extraMoveDice = 1;
+          pushLog(s, `💨 Winds gather around ${HEROES[hero.id].name}: +1 movement die on this turn's roll.`, "spell");
+        }
+        break;
+      }
+
+      case "blink": { // Riftstride: τηλεμεταφορά μέσα από τοίχους, χωρίς παγίδες
+        const [bx, by] = cell;
+        hero.x = bx; hero.y = by;
+        const area = areaAt(board, bx, by);
+        if (area) revealArea(s, board, area);
+        pushFx(s, { t: "banner", text: `🌀 ${HEROES[hero.id].name} strides through the rift!`, ms: 1300 });
+        pushFx(s, { t: "move", key: `hero_${hero.id}`, path: [[bx, by]] });
+        pushLog(s, `🌀 ${HEROES[hero.id].name} reappears in a rush of cold air.`, "spell");
+        break;
+      }
+
+      case "push": { // Skyhowl: σπρώξιμο 2 κελιά μακριά από τον caster
+        const dx0 = tMon.x - hero.x, dy0 = tMon.y - hero.y;
+        let dir;
+        if (Math.abs(dx0) > Math.abs(dy0)) dir = [Math.sign(dx0), 0];
+        else if (Math.abs(dy0) > Math.abs(dx0)) dir = [0, Math.sign(dy0)];
+        else { const r = rng(s); dir = r() < 0.5 ? [Math.sign(dx0) || 1, 0] : [0, Math.sign(dy0) || 1]; }
+        const furniture = new Set(
+          (s.quest.furniture || []).filter((f) => f.type !== "stairs").map((f) => f.cell.join(","))
+        );
+        const path = [];
+        for (let i = 0; i < sp.cells; i++) {
+          const nx = tMon.x + dir[0], ny = tMon.y + dir[1];
+          if (!isWalkable(board, s, nx, ny) || furniture.has(`${nx},${ny}`) ||
+              heroAt(s, nx, ny) || monsterAt(s, nx, ny)) break;
+          tMon.x = nx; tMon.y = ny;
+          path.push([nx, ny]);
+        }
+        if (path.length) {
+          const area = areaAt(board, tMon.x, tMon.y);
+          if (area) tMon.area = area;
+          pushFx(s, { t: "move", key: `mob_${tMon.id}`, path });
+        }
+        if (path.length < sp.cells) {
+          pushFx(s, { t: "banner", text: `🌬 The ${MONSTERS[tMon.type].name} slams into stone!`, ms: 1400 });
+          pushLog(s, `🌬 The gust slams the ${MONSTERS[tMon.type].name} into stone: 1 damage.`, "combat");
+          damageMonster(s, tMon, 1);
+        } else {
+          pushLog(s, `🌬 The ${MONSTERS[tMon.type].name} is hurled ${path.length} squares back.`, "spell");
+        }
+        break;
+      }
+
+      case "defSkin": // Granite Shell
+        tHero.defBonus = sp.bonus;
+        pushLog(s, `🛡 Living stone sheathes ${HEROES[tHero.id].name} (+${sp.bonus} defense dice until hit).`, "spell");
+        break;
+
+      case "hold": // Gravelock
+        tMon.held = true;
+        pushLog(s, `⛓ Barrow-chains bind the ${MONSTERS[tMon.type].name} — it cannot act next turn.`, "spell");
+        break;
+
+      default: return false;
+    }
 
     hero.spells = hero.spells.filter((id) => id !== spellId);
     s.turn.actionUsed = true;
@@ -490,4 +685,4 @@ export function advanceTurn(s) {
   return true;
 }
 
-export { activeHero };
+export { activeHero, rng, damageHero, damageMonster };

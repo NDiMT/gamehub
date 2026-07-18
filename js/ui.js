@@ -1,6 +1,6 @@
 // DOM UI layer: lobby, HUD, action bar, dice tray, cards, pickers.
 // No game rules live here.
-import { HEROES, MONSTERS, SPELLS } from "./config.js";
+import { HEROES, MONSTERS, SPELLS, SPELL_GROUPS } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -95,7 +95,13 @@ export function createUI() {
     const def = HEROES[mine.id];
     const shield = mine.defense + (mine.artifacts?.reduce((n, a) => n + (a.defenseBonus || 0), 0) || 0);
     const potions = mine.potions.map((p) => p === "heal2" ? "🧪Heal" : "🧪Fury").join(" ") || "";
-    const status = `${mine.inPit ? " · 🕳in pit" : ""}${mine.strBonus ? " · 💪+1 next attack" : ""}`;
+    // Chips κατάστασης: παγίδες, buffs ξορκιών, dread debuffs — ό,τι αλλάζει ζάρια
+    const status = `${mine.inPit ? " · 🕳in pit" : ""}` +
+      `${mine.strBonus ? ` · 💪+${mine.strBonus} attack` : ""}` +
+      `${mine.defBonus ? ` · 🪨+${mine.defBonus} shell` : ""}` +
+      `${mine.veiled ? " · 🌫veiled" : ""}` +
+      `${mine.shaken ? " · 😱shaken" : ""}` +
+      `${mine.extraMoveDice ? " · 💨swift" : ""}`;
     el.heroCard.innerHTML = `
       <b>${def.name}</b> <span class="hearts">${"❤".repeat(mine.body)}<span class="dim">${"♡".repeat(Math.max(0, mine.maxBody - mine.body))}</span></span><br>
       <small>⚔${mine.attack} 🛡${shield} · 💰${mine.gold}${potions ? " · " + potions : ""}${status}${mine.alive ? "" : " · ☠ DOWN"}</small>`;
@@ -138,7 +144,7 @@ export function createUI() {
     if (!state.turn.moveRoll) {
       mkIcon("roll", "🎲", "Roll", handlers.rollMove, state.turn.over, "roll");
     } else {
-      const left = state.turn.moveRoll[0] + state.turn.moveRoll[1] - state.turn.moved;
+      const left = state.turn.moveRoll.reduce((a, b) => a + b, 0) - state.turn.moved;
       mkIcon("steps", "👣", `${left} left`, () => {}, true, "info");
     }
 
@@ -194,8 +200,11 @@ export function createUI() {
 
   // ---------- Bottom sheet: γενικός picker (ξόρκια, φίλτρα...) ----------
   function showPickerSheet(title, items, onPick) {
+    // items με header:true γίνονται μη-πατήσιμες κεφαλίδες (π.χ. σχολή ξορκιών)
     el.sheet.innerHTML = `<div class="sheet-title">${title}</div>` +
-      items.map((it) => `<button class="sheet-item" data-pick="${it.id}">
+      items.map((it) => it.header
+        ? `<div class="sheet-header">${it.name}</div>`
+        : `<button class="sheet-item" data-pick="${it.id}">
           <span class="sheet-icon">${it.icon}</span>
           <span><b>${it.name}</b><small>${it.desc}</small></span></button>`).join("") +
       `<button class="sheet-item sheet-cancel">✖ Cancel</button>`;
@@ -209,10 +218,19 @@ export function createUI() {
   }
 
   function showSpellSheet(hero, onPick) {
-    showPickerSheet("Choose a spell", hero.spells.map((id) => {
+    // Ομαδοποίηση ανά σχολή, με τη σχολή ως κεφαλίδα
+    const byGroup = {};
+    for (const id of hero.spells) {
       const sp = SPELLS[id];
-      return { id, icon: sp.icon, name: sp.name, desc: sp.desc };
-    }), onPick);
+      if (sp) (byGroup[sp.group] ||= []).push(sp);
+    }
+    const items = [];
+    for (const gid of Object.keys(SPELL_GROUPS)) {
+      if (!byGroup[gid]) continue;
+      items.push({ header: true, name: `${SPELL_GROUPS[gid].icon} ${SPELL_GROUPS[gid].name}` });
+      for (const sp of byGroup[gid]) items.push({ id: sp.id, icon: sp.icon, name: sp.name, desc: sp.desc });
+    }
+    showPickerSheet("Choose a spell", items, onPick);
   }
   function hideSheet() { el.sheet.classList.add("hidden"); }
 
