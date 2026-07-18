@@ -107,18 +107,6 @@
       ]
     },
     {
-      "id": "spine",
-      "type": "corridor",
-      "rects": [
-        [
-          9,
-          5,
-          1,
-          17
-        ]
-      ]
-    },
-    {
       "id": "cross2",
       "type": "corridor",
       "rects": [
@@ -139,6 +127,18 @@
           19,
           13,
           1
+        ]
+      ]
+    },
+    {
+      "id": "spine",
+      "type": "corridor",
+      "rects": [
+        [
+          9,
+          5,
+          1,
+          17
         ]
       ]
     }

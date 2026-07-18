@@ -116,6 +116,7 @@ function damageHero(s, hero, amount, source) {
   pushLog(s, `${HEROES[hero.id].name} loses ${amount} Body (${source}). ${hero.body} left.`, "damage");
   if (hero.body === 0) {
     hero.alive = false;
+    pushFx(s, { t: "banner", text: `☠ ${HEROES[hero.id].name} has fallen!`, ms: 1800 });
     pushLog(s, `☠ ${HEROES[hero.id].name} has fallen!`, "death");
     if (Object.values(s.heroes).every((h) => !h.alive)) {
       s.phase = "defeat";
@@ -129,10 +130,12 @@ function damageMonster(s, monster, amount) {
   const def = MONSTERS[monster.type];
   if (monster.body <= 0) {
     monster.alive = false;
+    pushFx(s, { t: "banner", text: `💀 ${def.name} is destroyed!`, ms: 1300 });
     pushLog(s, `💀 ${def.name} is destroyed!`, "kill");
     const obj = s.quest.objective;
     if (obj.type === "killBoss" && monster.id === obj.target) {
       s.phase = "victory";
+      pushFx(s, { t: "banner", text: "🏆 STONEWRATH crumbles to rubble!", ms: 2000 });
       pushLog(s, "STONEWRATH crumbles to rubble. VICTORY!", "end");
     }
   } else {
@@ -146,18 +149,23 @@ function triggerTrap(s, board, hero, trapDef) {
   ts.revealed = true;
   const r = rng(s);
   if (trapDef.type === "pit") {
+    pushFx(s, { t: "banner", text: "🕳 The floor gives way — a pit trap!", ms: 1600 });
     damageHero(s, hero, RULES.pitDamage, "pit trap");
     hero.inPit = true;
     s.turn.over = true;
     pushLog(s, `${HEROES[hero.id].name} fell into a pit! Turn ends.`, "trap");
   } else if (trapDef.type === "spear") {
     const face = DIE_FACES[Math.floor(r() * 6)];
-    if (face === "skull") damageHero(s, hero, RULES.spearDamage, "spear trap");
+    const hit = face === "skull";
+    pushFx(s, { t: "trapdie", text: "🗡 A spear trap springs!", face, hit });
+    if (hit) damageHero(s, hero, RULES.spearDamage, "spear trap");
     else pushLog(s, `${HEROES[hero.id].name} dodged the spear!`, "trap");
     s.turn.over = true;
   } else if (trapDef.type === "chest") {
     const face = DIE_FACES[Math.floor(r() * 6)];
-    if (face !== "white") damageHero(s, hero, 1, "trapped chest");
+    const hit = face !== "white";
+    pushFx(s, { t: "trapdie", text: "⚠ The chest is trapped!", face, hit });
+    if (hit) damageHero(s, hero, 1, "trapped chest");
     else pushLog(s, `${HEROES[hero.id].name} pulled back just in time!`, "trap");
     s.turn.over = true;
   }
@@ -171,6 +179,7 @@ function spawnWandering(s, board, hero) {
     if (areaAt(board, x, y) && !monsterAt(s, x, y) && !heroAt(s, x, y)) {
       const id = `w${s.rngCalls}`;
       s.monsters[id] = { id, type, x, y, area: areaAt(board, x, y), body: def.body, alive: true, held: false };
+      pushFx(s, { t: "banner", text: `👁 A ${def.name} lunges from the shadows!`, ms: 1700 });
       pushLog(s, `A ${def.name} lunges out of the shadows and attacks!`, "monster");
       resolveAttack(s, s.monsters[id], hero, def.attack, true);
       return;
@@ -179,7 +188,7 @@ function spawnWandering(s, board, hero) {
   pushLog(s, "Footsteps echo... but nothing can squeeze through.", "monster");
 }
 
-function resolveAttack(s, attacker, defender, attackDice, attackerIsMonster) {
+export function resolveAttack(s, attacker, defender, attackDice, attackerIsMonster) {
   const r = rng(s);
   const atk = rollCombat(r, attackDice);
   const skulls = atk.filter((f) => f === "skull").length;
@@ -215,7 +224,7 @@ function resolveAttack(s, attacker, defender, attackDice, attackerIsMonster) {
 // structuredClone πριν, ώστε να στέλνει καθαρά snapshots).
 export const commands = {
   rollMove(s) {
-    if (s.turn.moveRoll) return false;
+    if (!activeHero(s).alive || s.turn.moveRoll) return false;
     const r = rng(s);
     const dice = [rollDie(r), rollDie(r)];
     s.turn.moveRoll = dice;
@@ -260,6 +269,11 @@ export const commands = {
       if (trapDef) {
         const ts = s.traps[trapDef.id];
         if (!ts.triggered && !ts.disarmed) {
+          // Το βάδισμα μέχρι εδώ παίζει ΠΡΙΝ την παγίδα — σωστή σειρά στα fx
+          if (walked.length) {
+            pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked.slice() });
+            walked.length = 0;
+          }
           triggerTrap(s, board, hero, trapDef);
           if (s.turn.over) break;
         }
@@ -381,7 +395,12 @@ export const commands = {
     let found = 0;
 
     for (const t of s.quest.traps || []) {
-      const inArea = t.area === area || (t.cell && areaAt(board, t.cell[0], t.cell[1]) === area);
+      // «Στην περιοχή» ή πολύ κοντά — καλύπτει και τα κελιά-κόμβους όπου
+      // διάδρομοι τέμνονται και το areaAt επιστρέφει μόνο τον έναν.
+      const inArea = t.area === area || (t.cell && (
+        areaAt(board, t.cell[0], t.cell[1]) === area ||
+        Math.abs(t.cell[0] - hero.x) + Math.abs(t.cell[1] - hero.y) <= 2
+      ));
       if (inArea && !s.traps[t.id].triggered && !s.traps[t.id].revealed) {
         s.traps[t.id].revealed = true;
         found++;

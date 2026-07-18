@@ -75,6 +75,7 @@ export function createUI() {
 
   let bannerShownFor = null;
   function maybeShowTurnBanner(state, mySeat) {
+    if (Object.keys(state.heroes).length === 1) return; // solo: κάθε γύρος είναι δικός σου
     const heroId = state.turnOrder[state.turnIndex];
     const keyId = `${state.round}:${heroId}`;
     const mine = state.heroes[heroId].seat === mySeat;
@@ -94,9 +95,10 @@ export function createUI() {
     const def = HEROES[mine.id];
     const shield = mine.defense + (mine.artifacts?.reduce((n, a) => n + (a.defenseBonus || 0), 0) || 0);
     const potions = mine.potions.map((p) => p === "heal2" ? "🧪Heal" : "🧪Fury").join(" ") || "";
+    const status = `${mine.inPit ? " · 🕳in pit" : ""}${mine.strBonus ? " · 💪+1 next attack" : ""}`;
     el.heroCard.innerHTML = `
       <b>${def.name}</b> <span class="hearts">${"❤".repeat(mine.body)}<span class="dim">${"♡".repeat(Math.max(0, mine.maxBody - mine.body))}</span></span><br>
-      <small>⚔${mine.attack} 🛡${shield} · 💰${mine.gold}${potions ? " · " + potions : ""}${mine.alive ? "" : " · ☠ DOWN"}</small>`;
+      <small>⚔${mine.attack} 🛡${shield} · 💰${mine.gold}${potions ? " · " + potions : ""}${status}${mine.alive ? "" : " · ☠ DOWN"}</small>`;
   }
 
   // ---------- Action bar: μόνο εικονίδια, χωρίς scroll ----------
@@ -146,7 +148,10 @@ export function createUI() {
     mkIcon("loot", "🔍", "Loot", handlers.searchTreasure, actionDone);
     mkIcon("inspect", "🕯", "Inspect", handlers.searchTraps, actionDone);
     if (HEROES[hero.id].trait === "disarm") mkIcon("disarm", "🔧", "Disarm", handlers.beginDisarm, actionDone);
-    if (hero.potions.length) mkIcon("potion", "🧪", "Potion", handlers.drinkPotion, state.turn.over);
+    if (hero.potions.length) {
+      const plabel = hero.potions.length > 1 ? `Potion ×${hero.potions.length}` : "Potion";
+      mkIcon("potion", "🧪", plabel, handlers.drinkPotion, state.turn.over);
+    }
     mkIcon("end", "⏭", "End", handlers.endTurn, false, "end-turn");
   }
 
@@ -183,27 +188,31 @@ export function createUI() {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => el.card.querySelector(".tcard").classList.add("flip")));
     clearTimeout(el.card._timer);
-    el.card._timer = setTimeout(() => el.card.classList.add("hidden"), 3200);
+    el.card._timer = setTimeout(() => el.card.classList.add("hidden"), 2600);
     el.card.onclick = () => el.card.classList.add("hidden");
   }
 
-  // ---------- Bottom sheet (spell picker) ----------
-  function showSpellSheet(hero, onPick) {
-    el.sheet.innerHTML = `<div class="sheet-title">Choose a spell</div>` +
-      hero.spells.map((id) => {
-        const sp = SPELLS[id];
-        return `<button class="sheet-item" data-spell="${id}">
-          <span class="sheet-icon">${sp.icon}</span>
-          <span><b>${sp.name}</b><small>${sp.desc}</small></span></button>`;
-      }).join("") +
+  // ---------- Bottom sheet: γενικός picker (ξόρκια, φίλτρα...) ----------
+  function showPickerSheet(title, items, onPick) {
+    el.sheet.innerHTML = `<div class="sheet-title">${title}</div>` +
+      items.map((it) => `<button class="sheet-item" data-pick="${it.id}">
+          <span class="sheet-icon">${it.icon}</span>
+          <span><b>${it.name}</b><small>${it.desc}</small></span></button>`).join("") +
       `<button class="sheet-item sheet-cancel">✖ Cancel</button>`;
     el.sheet.classList.remove("hidden");
     el.sheet.onclick = (e) => {
       const item = e.target.closest(".sheet-item");
       if (!item) return;
       el.sheet.classList.add("hidden");
-      if (item.dataset.spell) onPick(item.dataset.spell);
+      if (item.dataset.pick) onPick(item.dataset.pick);
     };
+  }
+
+  function showSpellSheet(hero, onPick) {
+    showPickerSheet("Choose a spell", hero.spells.map((id) => {
+      const sp = SPELLS[id];
+      return { id, icon: sp.icon, name: sp.name, desc: sp.desc };
+    }), onPick);
   }
   function hideSheet() { el.sheet.classList.add("hidden"); }
 
@@ -226,6 +235,6 @@ export function createUI() {
   return {
     el, show, toast, renderLobby, renderTurnBar, renderHeroCard,
     renderActions, renderLog, showBanner, showCard,
-    showSpellSheet, hideSheet, maybeShowTurnBanner, showEnd,
+    showSpellSheet, showPickerSheet, hideSheet, maybeShowTurnBanner, showEnd,
   };
 }

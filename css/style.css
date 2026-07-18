@@ -265,6 +265,19 @@ input {
 }
 #btn-rotate { top: calc(env(safe-area-inset-top, 0px) + 114px); }
 
+/* Fast-forward των fx (φάση τεράτων κ.λπ.) */
+#btn-skip {
+  position: absolute;
+  right: 10px;
+  top: calc(env(safe-area-inset-top, 0px) + 168px);
+  min-height: 38px;
+  padding: 6px 12px;
+  border-radius: 19px;
+  z-index: 6;
+  font-size: 0.78rem;
+  letter-spacing: 0.5px;
+}
+
 #game-log {
   position: absolute;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);

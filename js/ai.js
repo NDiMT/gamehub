@@ -14,6 +14,8 @@ export function runMonsterPhase(s, resolveAttack) {
     if (!s.revealed[monster.area]) continue;
     if (monster.held) {
       monster.held = false;
+      (s.fx ||= []).push({ t: "banner", text: `❄ ${MONSTERS[monster.type].name} is frozen and skips its turn!`, ms: 1500 });
+      s.log.push({ t: "spell", text: `❄ ${MONSTERS[monster.type].name} is held fast and cannot act.` });
       actions.push({ type: "held", id: monster.id });
       continue;
     }

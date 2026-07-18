@@ -140,6 +140,15 @@ function hostApply(seat, cmd, args) {
   if (state.pendingMonsterPhase && state.phase === "playing") {
     runMonsterPhase(state, monsterAttack);
   }
+  // Αν η φάση τεράτων σκότωσε τον ήρωα που έχει σειρά → προσπέρασέ τον
+  let guard = 0;
+  while (state.phase === "playing" &&
+         !state.heroes[state.turnOrder[state.turnIndex]].alive && guard++ < 8) {
+    if (!advanceTurn(state)) break;
+    if (state.pendingMonsterPhase && state.phase === "playing") {
+      runMonsterPhase(state, monsterAttack);
+    }
+  }
   broadcastState();
 }
 
@@ -157,72 +166,157 @@ function serializable(s) {
   return rest;
 }
 
+// Το state ΔΕΝ ζωγραφίζεται αμέσως: πρώτα παίζουν τα fx (ζάρια, κινήσεις,
+// banners) και ΜΕΤΑ συγχρονίζεται ταμπλό/HUD/log — τίποτα δεν προδίδει
+// το αποτέλεσμα πριν πέσουν τα ζάρια.
+let pendingRender = null;
 async function onStateReceived(newState, fx = {}) {
   if (!isHost) state = newState;
-  const renderState = state;
-
   if (!view) await enterGame(); // guest: πρώτο state → μπες στο ταμπλό
-  view.sync(renderState);
-  if (fx.fx?.length) enqueueFx(fx.fx);
-  ui.renderTurnBar(renderState, mySeat);
-  ui.renderHeroCard(renderState, mySeat);
-  ui.renderLog(renderState);
-  ui.maybeShowTurnBanner(renderState, mySeat);
-  refreshActions(renderState);
 
-  const activeId = renderState.turnOrder[renderState.turnIndex];
-  const active = renderState.heroes[activeId];
-  if (active?.alive) { view.focusCell(active.x, active.y); view.setLantern(active.x, active.y); }
+  const events = fx.fx || [];
+  if (events.length || fxPlaying) {
+    pendingRender = state;
+    if (events.length) enqueueFx(events);
+  } else {
+    applyRender(state);
+  }
+}
 
-  if (renderState.phase !== "playing") setTimeout(() => ui.showEnd(renderState), 1800);
-  highlightForMode(renderState);
+let lastTurnKey = null, lastActivePos = null, turnOverHintFor = null;
+function applyRender(s) {
+  view.sync(s);
+  ui.renderTurnBar(s, mySeat);
+  ui.renderHeroCard(s, mySeat);
+  ui.renderLog(s);
+  ui.maybeShowTurnBanner(s, mySeat);
+  refreshActions(s);
+
+  const activeId = s.turnOrder[s.turnIndex];
+  const active = s.heroes[activeId];
+  const turnKey = `${s.round}:${s.turnIndex}`;
+  if (active?.alive) {
+    view.setLantern(active.x, active.y);
+    // Κάμερα: μόνο σε αλλαγή σειράς ή κίνηση ήρωα — και με σεβασμό στο
+    // χειροκίνητο pan του παίκτη (btn-center πάντα επαναφέρει).
+    const posKey = `${active.x},${active.y}`;
+    const turnChanged = lastTurnKey !== turnKey;
+    const heroMoved = lastActivePos !== posKey;
+    if (turnChanged && (active.seat === mySeat || !view.userPannedRecently())) {
+      view.focusCell(active.x, active.y);
+    } else if (!turnChanged && heroMoved && !view.userPannedRecently()) {
+      view.focusCell(active.x, active.y);
+    }
+    lastActivePos = posKey;
+  }
+  lastTurnKey = turnKey;
+
+  // «Νεκρός χρόνος» μετά από παγίδα: πες του τι να κάνει
+  if (s.phase === "playing" && active?.seat === mySeat && s.turn.over && turnOverHintFor !== turnKey) {
+    turnOverHintFor = turnKey;
+    ui.toast("Your turn is over — tap End.");
+  }
+
+  if (s.phase !== "playing") setTimeout(() => ui.showEnd(s), 1200);
+  highlightForMode(s);
 }
 
 // ---------- FX sequencer: παίζει τα events με σειρά και δραματικές παύσεις ----------
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Ο παίκτης μπορεί να πατήσει ⏩ για γρήγορη προώθηση (π.χ. μεγάλη φάση τεράτων).
 const fxQueue = [];
 let fxPlaying = false;
+let fxFast = false;
+const sleep = (ms) => new Promise((r) => setTimeout(r, fxFast ? Math.min(ms, 70) : ms));
+const btnSkip = document.getElementById("btn-skip");
+btnSkip?.addEventListener("click", () => {
+  fxFast = true;
+  btnSkip.classList.add("hidden");
+});
 
 function enqueueFx(events) {
   fxQueue.push(...events);
   if (!fxPlaying) playFxQueue();
+  else if (fxQueue.length >= 2 && !fxFast) btnSkip?.classList.remove("hidden");
 }
 
 async function playFxQueue() {
   fxPlaying = true;
+  if (fxQueue.length >= 2) btnSkip?.classList.remove("hidden");
   while (fxQueue.length) {
     const ev = fxQueue.shift();
     try { await playFxEvent(ev); } catch (err) { console.warn("fx error", err); }
   }
   fxPlaying = false;
+  fxFast = false;
+  btnSkip?.classList.add("hidden");
+  if (pendingRender) {
+    const s = pendingRender;
+    pendingRender = null;
+    applyRender(s);
+  }
+}
+
+// Κάμερα ακολουθεί τη δράση των fx — εκτός αν ο παίκτης κοιτάει αλλού
+function fxFocusPiece(pieceKey) {
+  const p = view?.pieces?.get(pieceKey);
+  if (p && !view.userPannedRecently()) view.focusCell(p.position.x - 0.5, p.position.z - 0.5);
 }
 
 async function playFxEvent(ev) {
   if (!view) return;
   if (ev.t === "move") {
+    const last = ev.path[ev.path.length - 1];
+    if (!view.userPannedRecently()) view.focusCell(last[0], last[1]);
     view.playMove(ev.key, ev.path);
-    await sleep(ev.path.length * 160 + 150);
+    await sleep(ev.path.length * 140 + 100);
   } else if (ev.t === "roll") {
-    ui.showBanner(`🎲 ${ev.hero} rolls...`, 1200);
+    if (fxFast) {
+      ui.showBanner(`👣 ${ev.dice[0] + ev.dice[1]} steps`, 900);
+      return sleep(300);
+    }
+    ui.showBanner(`🎲 ${ev.hero} rolls...`, 1000);
     await view.rollDice3D(ev.dice.map((n) => ({ kind: "num", value: n })), "move");
-    ui.showBanner(`👣 ${ev.dice[0] + ev.dice[1]} steps`, 1300);
-    await sleep(700);
+    ui.showBanner(`👣 ${ev.dice[0] + ev.dice[1]} steps`, 1200);
+    await sleep(450);
     view.clearDice3D();
   } else if (ev.t === "dice") {
-    ui.showBanner(`⚔ ${ev.attacker} attacks ${ev.defender}!`, 1300);
-    await sleep(1000);
+    fxFocusPiece(ev.defenderKey);
+    const skulls = ev.atk.filter((f) => f === "skull").length;
+    const shields = ev.def.filter((f) => f === ev.shieldFace).length;
+    if (fxFast) {
+      view.playAttack(ev.attackerKey, ev.defenderKey);
+      ui.showBanner(`⚔ ${ev.attacker}: ${skulls}💀 vs ${shields}🛡 — ${ev.damage > 0 ? ev.damage + " damage" : "blocked"}`, 900);
+      return sleep(650);
+    }
+    ui.showBanner(`⚔ ${ev.attacker} attacks ${ev.defender}!`, 1100);
+    await sleep(700);
     await view.rollDice3D(ev.atk.map((f) => ({ kind: f })), "attack");
-    await sleep(400);
+    await sleep(250);
     await view.rollDice3D(ev.def.map((f) => ({ kind: f })), "defense");
-    await sleep(550);
+    await sleep(350);
     view.playAttack(ev.attackerKey, ev.defenderKey);
     try { navigator.vibrate?.(ev.damage > 0 ? [50, 40, 80] : 30); } catch { }
-    ui.showBanner(ev.damage > 0 ? `💥 ${ev.damage} damage!` : "🛡 Blocked!", 1500);
-    await sleep(1100);
+    ui.showBanner(ev.damage > 0 ? `💥 ${ev.damage} damage!` : "🛡 Blocked!", 1400);
+    await sleep(800);
     view.clearDice3D();
+  } else if (ev.t === "trapdie") {
+    // Παγίδα με ζαριά διαφυγής: μικρό δράμα αντί για αόρατο roll
+    if (fxFast) {
+      ui.showBanner(`${ev.text} ${ev.hit ? "💥 Hit!" : "😮‍💨 Dodged!"}`, 900);
+      return sleep(500);
+    }
+    ui.showBanner(ev.text, 1200);
+    await sleep(800);
+    await view.rollDice3D([{ kind: ev.face }], "attack");
+    ui.showBanner(ev.hit ? "💥 Hit!" : "😮‍💨 Dodged!", 1200);
+    await sleep(700);
+    view.clearDice3D();
+  } else if (ev.t === "banner") {
+    ui.showBanner(ev.text, ev.ms || 1500);
+    await sleep(Math.min(ev.ms || 1500, 1300));
   } else if (ev.t === "card") {
     ui.showCard(ev);
-    await sleep(2200);
+    await sleep(2400);
   }
 }
 
@@ -233,6 +327,7 @@ async function enterGame() {
   view.onTap = onCellTap;
   ui.el.btnCenter.addEventListener("click", () => {
     const active = state?.heroes[state.turnOrder[state.turnIndex]];
+    view.clearUserPan(); // «γύρνα με στη δράση» — η κάμερα ξανακολουθεί
     if (active) view.focusCell(active.x, active.y);
   });
   document.getElementById("btn-rotate").addEventListener("click", () => view.rotateBy(Math.PI / 4));
@@ -252,23 +347,115 @@ function issue(cmd, args) {
   uiMode.pendingMove = null;
   if (isHost) hostApply(mySeat, cmd, args);
   else net.send({ type: "command", seat: mySeat, cmd, args });
+  // Το ταμπλό/HUD περιμένουν τα fx, αλλά το action bar καθρεφτίζει ΑΜΕΣΩΣ
+  // ότι η εντολή στάλθηκε — αλλιώς μένει κολλημένο σε Confirm/Cancel.
+  refreshActions(state);
+  if (fxPlaying) view?.clearHighlights();
+  else highlightForMode(state);
 }
 
+// Έγκυροι στόχοι ανά mode — ΙΔΙΑ κριτήρια με τα commands στο state.js,
+// ώστε τα highlights να μη λένε ποτέ ψέματα.
+function targetCellsFor(s, mode) {
+  const hero = s.heroes[s.turnOrder[s.turnIndex]];
+  const board = buildBoard(s.quest);
+  if (mode === "attack") {
+    return Object.values(s.monsters)
+      .filter((m) => m.alive && s.revealed[m.area])
+      .filter((m) => isAdjacent(hero, m) ||
+        (HEROES[hero.id].trait === "ranged" && lineOfSight(board, s, hero.x, hero.y, m.x, m.y)))
+      .map((m) => key(m.x, m.y));
+  }
+  if (mode === "disarm") {
+    return (s.quest.traps || [])
+      .filter((t) => t.cell && s.traps[t.id].revealed && !s.traps[t.id].disarmed && !s.traps[t.id].triggered)
+      .filter((t) => Math.abs(hero.x - t.cell[0]) + Math.abs(hero.y - t.cell[1]) <= 1)
+      .map((t) => key(t.cell[0], t.cell[1]));
+  }
+  if (mode === "spell:heal") {
+    return Object.values(s.heroes)
+      .filter((h) => h.alive && (h.id === hero.id || lineOfSight(board, s, hero.x, hero.y, h.x, h.y)))
+      .map((h) => key(h.x, h.y));
+  }
+  if (mode?.startsWith("spell:")) {
+    return Object.values(s.monsters)
+      .filter((m) => m.alive && s.revealed[m.area] && lineOfSight(board, s, hero.x, hero.y, m.x, m.y))
+      .map((m) => key(m.x, m.y));
+  }
+  return [];
+}
+
+// Γιατί δεν γίνεται search; — ίδιοι έλεγχοι με το state.js, ως μήνυμα
+function searchBlockReason(s, kind) {
+  const hero = s.heroes[s.turnOrder[s.turnIndex]];
+  if (s.turn.actionUsed || s.turn.over) return "Your action is spent this turn.";
+  const board = buildBoard(s.quest);
+  const area = areaAt(board, hero.x, hero.y);
+  const monstersHere = Object.values(s.monsters).some((m) => m.alive && m.area === area && s.revealed[m.area]);
+  if (kind === "treasure") {
+    const areaDef = s.quest.areas.find((a) => a.id === area);
+    if (!areaDef || areaDef.type !== "room") return "You can only search for treasure inside rooms.";
+    if (monstersHere) return "Clear the monsters here first!";
+    if (hero.searchedTreasure.includes(area)) return "You already searched this room.";
+  } else {
+    if (!area) return "There is nothing to inspect here.";
+    if (monstersHere) return "You cannot search while monsters lurk in this area!";
+  }
+  return null;
+}
+
+let endTapAt = 0;
 const handlers = {
   rollMove: () => issue("rollMove"),
-  endTurn: () => { uiMode.selecting = null; issue("endTurn"); },
-  searchTreasure: () => issue("searchTreasure"),
-  searchTraps: () => issue("searchTraps"),
+  endTurn: () => {
+    // Δικλείδα: αν δεν έχει ξοδέψει την ενέργειά του, ζήτα δεύτερο tap
+    if (state && state.phase === "playing" && !state.turn.actionUsed && !state.turn.over &&
+        Date.now() - endTapAt > 2500) {
+      endTapAt = Date.now();
+      ui.toast("Action unused — tap End again to confirm.");
+      return;
+    }
+    uiMode.selecting = null;
+    issue("endTurn");
+  },
+  searchTreasure: () => {
+    const reason = searchBlockReason(state, "treasure");
+    if (reason) return ui.toast(reason);
+    issue("searchTreasure");
+  },
+  searchTraps: () => {
+    const reason = searchBlockReason(state, "traps");
+    if (reason) return ui.toast(reason);
+    issue("searchTraps");
+  },
   drinkPotion: () => {
     const hero = myHero();
-    if (hero?.potions.length) issue("drinkPotion", { potion: hero.potions[0] });
+    if (!hero?.potions.length) return;
+    if (hero.potions.length === 1) return issue("drinkPotion", { potion: hero.potions[0] });
+    // Πάνω από ένα φίλτρο: διάλεξε — όχι τυφλό πιώμα του πρώτου
+    ui.showPickerSheet("Drink a potion", hero.potions.map((p, i) => ({
+      id: `${p}#${i}`, icon: "🧪",
+      name: p === "heal2" ? "Healing Potion" : "Potion of Fury",
+      desc: p === "heal2" ? "Restore up to 4 Body" : "+1 attack die on your next attack",
+    })), (id) => issue("drinkPotion", { potion: id.split("#")[0] }));
   },
-  beginAttack: () => { uiMode.selecting = "attack"; refreshActions(state); highlightForMode(state); },
-  beginDisarm: () => { uiMode.selecting = "disarm"; refreshActions(state); highlightForMode(state); },
+  beginAttack: () => {
+    if (!targetCellsFor(state, "attack").length) return ui.toast("No enemy within reach.");
+    uiMode.selecting = "attack";
+    ui.toast("Tap a highlighted enemy");
+    refreshActions(state); highlightForMode(state);
+  },
+  beginDisarm: () => {
+    if (!targetCellsFor(state, "disarm").length) return ui.toast("No revealed trap within reach.");
+    uiMode.selecting = "disarm";
+    ui.toast("Tap the trap to disarm");
+    refreshActions(state); highlightForMode(state);
+  },
   beginSpell: () => {
     const hero = myHero();
     if (!hero?.spells.length) return;
     ui.showSpellSheet(hero, (spellId) => {
+      if (!targetCellsFor(state, "spell:" + spellId).length) return ui.toast("No valid target in sight.");
       uiMode.selecting = "spell:" + spellId;
       ui.toast("Tap a highlighted target on the board");
       refreshActions(state); highlightForMode(state);
@@ -289,6 +476,17 @@ function refreshActions(s) {
   ui.renderActions(s, mySeat, handlers, uiMode);
 }
 
+// Κελιά με ΓΝΩΣΤΗ οπλισμένη παγίδα — μένουν κόκκινα, ποτέ χρυσά
+function armedTrapCells(s) {
+  const set = new Set();
+  for (const t of s.quest.traps || []) {
+    if (!t.cell || t.type === "chest") continue;
+    const ts = s.traps[t.id];
+    if (ts.revealed && !ts.disarmed && !ts.triggered) set.add(key(t.cell[0], t.cell[1]));
+  }
+  return set;
+}
+
 function highlightForMode(s) {
   if (!view || !s) return;
   view.clearHighlights();
@@ -298,48 +496,38 @@ function highlightForMode(s) {
   if (hero.seat !== mySeat || s.phase !== "playing") return;
 
   if (uiMode.selecting === "attack") {
-    const board = buildBoard(s.quest);
-    const cells = Object.values(s.monsters)
-      .filter((m) => m.alive && s.revealed[m.area])
-      .filter((m) => isAdjacent(hero, m) ||
-        (HEROES[hero.id].trait === "ranged" && lineOfSight(board, s, hero.x, hero.y, m.x, m.y)))
-      .map((m) => key(m.x, m.y));
-    view.setHighlights(cells, 0xff5566);
+    view.setHighlights(targetCellsFor(s, "attack"), 0xff5566);
   } else if (uiMode.selecting?.startsWith("spell:")) {
-    const spellId = uiMode.selecting.split(":")[1];
-    const board = buildBoard(s.quest);
-    if (spellId === "heal") {
-      const cells = Object.values(s.heroes).filter((h) => h.alive).map((h) => key(h.x, h.y));
-      view.setHighlights(cells, 0x66ccff);
-    } else {
-      const cells = Object.values(s.monsters)
-        .filter((m) => m.alive && s.revealed[m.area] && lineOfSight(board, s, hero.x, hero.y, m.x, m.y))
-        .map((m) => key(m.x, m.y));
-      view.setHighlights(cells, 0xcc88ff);
-    }
+    const heal = uiMode.selecting === "spell:heal";
+    view.setHighlights(targetCellsFor(s, uiMode.selecting), heal ? 0x66ccff : 0xcc88ff);
   } else if (uiMode.selecting === "disarm") {
-    const cells = (s.quest.traps || [])
-      .filter((t) => t.cell && s.traps[t.id].revealed && !s.traps[t.id].disarmed && !s.traps[t.id].triggered)
-      .map((t) => key(t.cell[0], t.cell[1]));
-    view.setHighlights(cells, 0xffcc44);
+    view.setHighlights(targetCellsFor(s, "disarm"), 0xffcc44);
   } else if (uiMode.pendingMove) {
-    // Προεπισκόπηση διαδρομής: χρυσό μονοπάτι + δαχτυλίδι στον προορισμό
-    view.setHighlights(uiMode.pendingMove.path.map(([px, py]) => key(px, py)), 0xffd24a);
+    // Προεπισκόπηση διαδρομής: χρυσό μονοπάτι + δαχτυλίδι στον προορισμό·
+    // κελί με γνωστή παγίδα ΔΕΝ βάφεται χρυσό — μένει κόκκινο ως προειδοποίηση
+    const traps = armedTrapCells(s);
+    const cells = uiMode.pendingMove.path.map(([px, py]) => key(px, py)).filter((k) => !traps.has(k));
+    view.setHighlights(cells, 0xffd24a);
     view.setDestMarker(uiMode.pendingMove.x, uiMode.pendingMove.y);
   } else if (s.turn.moveRoll && !s.turn.over) {
     const board = buildBoard(s.quest);
     const left = s.turn.moveRoll[0] + s.turn.moveRoll[1] - s.turn.moved;
     if (left > 0) {
       const { stops } = reachableCells(board, s, hero, left);
-      // Δείξε μόνο ό,τι είναι ήδη αποκαλυμμένο — όχι spoilers μέσα στο fog
-      const visibleStops = [...stops].filter((k) => {
+      const traps = armedTrapCells(s);
+      const bright = [], dark = [];
+      for (const k of stops) {
+        if (traps.has(k)) continue; // παγίδες μένουν κόκκινες
         const [cx, cy] = k.split(",").map(Number);
         const area = areaAt(board, cx, cy);
-        if (area) return !!s.revealed[area];
         const door = board.doorAt.get(k);
-        return door && door.between.some((a) => s.revealed[a]);
-      });
-      view.setHighlights(visibleStops, 0xcfb46a);
+        const revealed = area ? !!s.revealed[area]
+          : door && door.between.some((a) => s.revealed[a]);
+        (revealed ? bright : dark).push(k);
+      }
+      // Αποκαλυμμένα: φωτεινό χρυσό. Στο σκοτάδι: αχνό — «μπορείς να μπεις»
+      view.setHighlights(bright, 0xe8d47f);
+      view.setHighlights(dark, 0x554a30, true);
     }
   }
 }
@@ -350,22 +538,31 @@ function onCellTap({ x, y }) {
   const hero = state.heroes[activeId];
   if (hero.seat !== mySeat) return;
 
-  if (uiMode.selecting === "attack") {
-    const target = Object.values(state.monsters).find((m) => m.alive && m.x === x && m.y === y);
-    if (target) { issue("attack", { targetId: target.id }); uiMode.selecting = null; }
-    return;
-  }
-  if (uiMode.selecting?.startsWith("spell:")) {
-    const spellId = uiMode.selecting.split(":")[1];
-    const monster = Object.values(state.monsters).find((m) => m.alive && m.x === x && m.y === y);
-    const heroT = Object.values(state.heroes).find((h) => h.alive && h.x === x && h.y === y);
-    const targetId = spellId === "heal" ? heroT?.id : monster?.id;
-    if (targetId) { issue("castSpell", { spellId, targetId }); uiMode.selecting = null; }
-    return;
-  }
-  if (uiMode.selecting === "disarm") {
-    const trap = (state.quest.traps || []).find((t) => t.cell && t.cell[0] === x && t.cell[1] === y);
-    if (trap) { issue("disarm", { trapId: trap.id }); uiMode.selecting = null; }
+  // Targeting modes: ΠΑΝΤΑ βγαίνουμε από το mode και ξαναζωγραφίζουμε το
+  // action bar — είτε πέτυχε ο στόχος είτε όχι. (Πριν: κολλούσε στο "Cancel".)
+  if (uiMode.selecting) {
+    const mode = uiMode.selecting;
+    const valid = targetCellsFor(state, mode).includes(key(x, y));
+    uiMode.selecting = null;
+    if (valid) {
+      if (mode === "attack") {
+        const target = Object.values(state.monsters).find((m) => m.alive && m.x === x && m.y === y);
+        issue("attack", { targetId: target.id });
+      } else if (mode === "disarm") {
+        const trap = (state.quest.traps || []).find((t) => t.cell && t.cell[0] === x && t.cell[1] === y);
+        issue("disarm", { trapId: trap.id });
+      } else {
+        const spellId = mode.split(":")[1];
+        const targetId = spellId === "heal"
+          ? Object.values(state.heroes).find((h) => h.alive && h.x === x && h.y === y)?.id
+          : Object.values(state.monsters).find((m) => m.alive && m.x === x && m.y === y)?.id;
+        if (targetId) issue("castSpell", { spellId, targetId });
+      }
+    } else {
+      ui.toast("Not a valid target — cancelled.");
+    }
+    refreshActions(state);
+    highlightForMode(state);
     return;
   }
 
@@ -397,6 +594,27 @@ function onCellTap({ x, y }) {
     return;
   }
 
+  // Λοιπά έπιπλα: λίγο flavor αντί για βουβό tap
+  const furn = (state.quest.furniture || []).find(
+    (f) => f.type !== "chest" && f.cell[0] === x && f.cell[1] === y && state.revealed[f.area]
+  );
+  if (furn && furn.type !== "stairs") {
+    const flavor = {
+      barrel: "Rainwater and rot. Nothing useful.",
+      bones: "Picked clean long ago.",
+      bookshelf: "Dusty tomes in a dead tongue.",
+      sarcophagus: "Sealed tight. Better left undisturbed.",
+      altar: "A cold presence lingers here...",
+      pillar: "Ancient stone, carved with warden sigils.",
+    }[furn.type];
+    if (flavor) ui.toast(flavor);
+    return;
+  }
+  if (furn?.type === "stairs" && (!state.turn.moveRoll || state.turn.over)) {
+    ui.toast("The stairway out — once your work below is done.");
+    return;
+  }
+
   // Κίνηση με επιβεβαίωση: 1ο tap = προεπισκόπηση, 2ο tap στο ίδιο κελί = εκτέλεση
   if (!state.turn.moveRoll || state.turn.over) return;
   if (uiMode.pendingMove && uiMode.pendingMove.x === x && uiMode.pendingMove.y === y) {
@@ -412,44 +630,15 @@ function onCellTap({ x, y }) {
   if (!stops.has(key(x, y))) { uiMode.pendingMove = null; refreshActions(state); highlightForMode(state); return; }
   const path = pathTo(prev, hero.x, hero.y, x, y);
   uiMode.pendingMove = { x, y, path, at: Date.now() };
+  if (armedTrapCells(state).has(key(x, y))) ui.toast("⚠ There is an armed trap on that square!");
   refreshActions(state);
   highlightForMode(state);
 }
 
 // ---------- AI wiring (host) ----------
-import { MONSTERS } from "./config.js";
-import { rollCombat, makeRng } from "./state.js";
-
-// Επίθεση τέρατος σε ήρωα (ίδιοι κανόνες ζαριών με το state.js)
-function monsterAttack(s, monster, hero, dice) {
-  const r = makeRng(s.seed + s.rngCalls * 7919);
-  s.rngCalls++;
-  const atk = rollCombat(r, dice);
-  const skulls = atk.filter((f) => f === "skull").length;
-  const defDice = Math.max(1,
-    hero.defense + (hero.artifacts?.reduce((n, a) => n + (a.defenseBonus || 0), 0) || 0) - (hero.inPit ? 1 : 0));
-  const def = rollCombat(r, defDice);
-  const shields = def.filter((f) => f === "white").length;
-  const damage = Math.max(0, skulls - shields);
-  const atkName = MONSTERS[monster.type].name;
-  (s.fx ||= []).push({
-    t: "dice",
-    attacker: atkName, defender: HEROES[hero.id].name, atk, def, shieldFace: "white", damage,
-    attackerKey: `mob_${monster.id}`, defenderKey: `hero_${hero.id}`,
-  });
-  s.log.push({ t: "combat", text: `${atkName} ⚔ ${HEROES[hero.id].name}: ${skulls} skulls vs ${shields} shields → ${damage} damage.` });
-  if (damage > 0) {
-    hero.body = Math.max(0, hero.body - damage);
-    if (hero.body === 0) {
-      hero.alive = false;
-      s.log.push({ t: "death", text: `☠ ${HEROES[hero.id].name} has fallen!` });
-      if (Object.values(s.heroes).every((h) => !h.alive)) {
-        s.phase = "defeat";
-        s.log.push({ t: "end", text: "Darkness swallows the party. DEFEAT." });
-      }
-    }
-  }
-}
+// Ίδιος resolver με τις επιθέσεις ηρώων (state.js) — μηδέν rules drift.
+import { resolveAttack } from "./state.js";
+const monsterAttack = (s, monster, hero, dice) => resolveAttack(s, monster, hero, dice, true);
 
 // ---------- Boot ----------
 (async function boot() {

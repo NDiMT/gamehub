@@ -61,6 +61,16 @@ export function reachableCells(board, state, actor, movesLeft, { isMonster = fal
   const furniture = new Set(
     (board.quest.furniture || []).filter((f) => f.type !== "stairs").map((f) => f.cell.join(","))
   );
+  // Γνωστές οπλισμένες παγίδες: ο ήρωας δεν τις ΔΙΑΣΧΙΖΕΙ κατά λάθος —
+  // μπορεί όμως να τις πατήσει συνειδητά ως προορισμό.
+  const trapStop = new Set();
+  if (!isMonster) {
+    for (const t of board.quest.traps || []) {
+      if (!t.cell || t.type === "chest") continue;
+      const ts = state.traps?.[t.id];
+      if (ts?.revealed && !ts.disarmed && !ts.triggered) trapStop.add(t.cell.join(","));
+    }
+  }
   const dist = new Map([[key(actor.x, actor.y), 0]]);
   const prev = new Map();
   const queue = [[actor.x, actor.y]];
@@ -92,7 +102,7 @@ export function reachableCells(board, state, actor, movesLeft, { isMonster = fal
 
       dist.set(k, d + 1);
       prev.set(k, key(cx, cy));
-      queue.push([nx, ny]);
+      if (!trapStop.has(k)) queue.push([nx, ny]);
     }
   }
 

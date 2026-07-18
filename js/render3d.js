@@ -304,6 +304,12 @@ export class BoardView {
     this.panTarget.set(x + 0.5 - this.center.x, y + 0.5 - this.center.z);
   }
 
+  // Ο παίκτης έκανε pan/rotate πρόσφατα; τότε ΜΗΝ του κλέβεις την κάμερα.
+  userPannedRecently(ms = 8000) {
+    return !!this.lastUserPan && performance.now() - this.lastUserPan < ms;
+  }
+  clearUserPan() { this.lastUserPan = 0; }
+
   #setupGestures(container) {
     let touches = new Map();
     let lastPinch = 0, lastAngle = null, moved = false;
@@ -331,6 +337,7 @@ export class BoardView {
         this.panOffset.x -= (dx * c + dy * s) * k;
         this.panOffset.y -= (-dx * s + dy * c) * k;
         this.panTarget.copy(this.panOffset);
+        if (moved) this.lastUserPan = performance.now();
         touches.set(t.identifier, { x: t.clientX, y: t.clientY });
         this.#updateCamera();
       } else if (touches.size === 2) {
@@ -353,6 +360,7 @@ export class BoardView {
         lastPinch = pinch;
         lastAngle = angle;
         moved = true;
+        this.lastUserPan = performance.now();
       }
     }, { passive: true });
 
@@ -701,8 +709,12 @@ export class BoardView {
   }
 
   #diceFocus() {
+    // Μετατόπιση προς την κάμερα: τα ζάρια προσγειώνονται στο κάτω μέρος
+    // της οθόνης, ΟΧΙ πάνω από τις μινιατούρες που μονομαχούν.
+    const c = Math.cos(this.orbit), s = Math.sin(this.orbit);
     return new THREE.Vector3(
-      this.center.x + this.panOffset.x, 0, this.center.z + this.panOffset.y);
+      this.center.x + this.panOffset.x + s * 1.6, 0,
+      this.center.z + this.panOffset.y + c * 1.6);
   }
 
   // Ρίχνει τα ζάρια ΕΝΑ-ΕΝΑ ΠΑΝΩ ΣΤΟ ΤΖΑΜΙ, με σειρές προσανατολισμένες στην κάμερα
@@ -714,7 +726,7 @@ export class BoardView {
     this.glass.position.set(focus.x, this.GLASS_Y - 0.27, focus.z);
     this.glass.visible = true;
     this.glassTargetOpacity = 1;
-    const STAGGER = 440, FLIGHT = 780;
+    const STAGGER = 360, FLIGHT = 680;
     specs.forEach((spec, i) => {
       setTimeout(() => {
         const mesh = this.#makeDieMesh(spec);
@@ -739,7 +751,7 @@ export class BoardView {
       }, i * STAGGER);
     });
     // συνολική διάρκεια: stagger + πτήση + μικρό settle
-    return new Promise((r) => setTimeout(r, (specs.length - 1) * STAGGER + FLIGHT + 320));
+    return new Promise((r) => setTimeout(r, (specs.length - 1) * STAGGER + FLIGHT + 260));
   }
 
   clearDice3D() {
@@ -768,10 +780,14 @@ export class BoardView {
     piece.userData.hopFrom = piece.position.clone();
     piece.userData.hopFrom.y = 0;
     piece.userData.hopT = 0;
+    // Το state sync γίνεται πλέον ΜΕΤΑ τα fx: κράτα το targetPos στο τέλος
+    // της διαδρομής, αλλιώς το lerp θα τραβήξει τη φιγούρα πίσω.
+    const [lx, ly] = path[path.length - 1];
+    piece.userData.targetPos = new THREE.Vector3(lx + 0.5, 0, ly + 0.5);
   }
 
-  setHighlights(cells, color = COLORS.highlight) {
-    this.clearHighlights();
+  setHighlights(cells, color = COLORS.highlight, append = false) {
+    if (!append) this.clearHighlights();
     for (const k of cells) {
       const tile = this.tileMeshes.get(k);
       if (!tile) continue;
