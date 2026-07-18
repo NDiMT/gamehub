@@ -155,6 +155,7 @@ export class BoardView {
   #setupGestures(container) {
     let touches = new Map();
     let lastPinch = 0, moved = false;
+    let lastTouchEnd = 0; // για να αγνοούμε το synthetic click μετά από tap
 
     container.addEventListener("touchstart", (e) => {
       for (const t of e.changedTouches) touches.set(t.identifier, { x: t.clientX, y: t.clientY });
@@ -191,6 +192,7 @@ export class BoardView {
     }, { passive: true });
 
     container.addEventListener("touchend", (e) => {
+      lastTouchEnd = performance.now();
       for (const t of e.changedTouches) {
         const start = touches.get(t.identifier);
         touches.delete(t.identifier);
@@ -202,8 +204,11 @@ export class BoardView {
       if (touches.size < 2) lastPinch = 0;
     }, { passive: true });
 
-    // Desktop: κλικ + ροδέλα (για δοκιμές)
+    // Desktop: κλικ + ροδέλα. ΠΡΟΣΟΧΗ: στα κινητά ο browser στέλνει
+    // "φάντασμα" click ~300ms μετά το touchend για το ίδιο tap — αν δεν το
+    // αγνοήσουμε, ένα φυσικό tap μετράει ως ΔΥΟ και αυτο-επιβεβαιώνει κίνηση.
     container.addEventListener("click", (e) => {
+      if (performance.now() - lastTouchEnd < 900) return;
       const cell = this.pickCell(e.clientX, e.clientY, container);
       if (cell && this.onTap) this.onTap(cell);
     });

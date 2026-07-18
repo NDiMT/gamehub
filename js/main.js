@@ -419,6 +419,18 @@ function monsterAttack(s, monster, hero, dice) {
 window.__cb = {
   get state() { return state; },
   get view() { return view; },
+  // Προβολή κελιού σε συντεταγμένες οθόνης — για E2E tests μέσω πραγματικών taps
+  cellToScreen(x, y) {
+    if (!view) return null;
+    const THREE_V = view.camera; // projection μέσω camera
+    const vec = new (Object.getPrototypeOf(view.camera.position).constructor)(x + 0.5, 0, y + 0.5);
+    vec.project(view.camera);
+    const rect = view.renderer.domElement.getBoundingClientRect();
+    return {
+      x: rect.left + ((vec.x + 1) / 2) * rect.width,
+      y: rect.top + ((-vec.y + 1) / 2) * rect.height,
+    };
+  },
   tapCell: (x, y) => onCellTap({ x, y }),
   tryAttackAdjacent() {
     if (!state) return false;
