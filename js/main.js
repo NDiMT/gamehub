@@ -145,14 +145,11 @@ function hostApply(seat, cmd, args) {
 
 // ---------- State διάδοση ----------
 function broadcastState() {
+  const events = state.fx || [];
+  state.fx = null;
   const snapshot = structuredClone(serializable(state));
-  const fx = {
-    lastDice: state.lastDice, lastRoll: state.lastRoll,
-    lastCard: state.lastCard, fxMoves: state.fxMoves,
-  };
-  if (net?.broadcast) net.broadcast({ type: "state", state: snapshot, ...fx });
-  onStateReceived(snapshot, fx);
-  state.lastDice = state.lastRoll = state.lastCard = state.fxMoves = null;
+  if (net?.broadcast) net.broadcast({ type: "state", state: snapshot, fx: events });
+  onStateReceived(snapshot, { fx: events });
 }
 
 function serializable(s) {
@@ -166,16 +163,10 @@ async function onStateReceived(newState, fx = {}) {
 
   if (!view) await enterGame(); // guest: πρώτο state → μπες στο ταμπλό
   view.sync(renderState);
-  if (fx.fxMoves) for (const m of fx.fxMoves) view.playMove(m.key, m.path);
+  if (fx.fx?.length) enqueueFx(fx.fx);
   ui.renderTurnBar(renderState, mySeat);
   ui.renderHeroCard(renderState, mySeat);
   ui.renderLog(renderState);
-  if (fx.lastDice) {
-    ui.showCombatDice(fx.lastDice);
-    if (fx.lastDice.attackerKey) view.playAttack(fx.lastDice.attackerKey, fx.lastDice.defenderKey);
-  }
-  else if (fx.lastRoll) ui.showMoveDice(fx.lastRoll);
-  if (fx.lastCard) ui.showCard(fx.lastCard);
   ui.maybeShowTurnBanner(renderState, mySeat);
   refreshActions(renderState);
 
@@ -185,6 +176,54 @@ async function onStateReceived(newState, fx = {}) {
 
   if (renderState.phase !== "playing") setTimeout(() => ui.showEnd(renderState), 1800);
   highlightForMode(renderState);
+}
+
+// ---------- FX sequencer: παίζει τα events με σειρά και δραματικές παύσεις ----------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fxQueue = [];
+let fxPlaying = false;
+
+function enqueueFx(events) {
+  fxQueue.push(...events);
+  if (!fxPlaying) playFxQueue();
+}
+
+async function playFxQueue() {
+  fxPlaying = true;
+  while (fxQueue.length) {
+    const ev = fxQueue.shift();
+    try { await playFxEvent(ev); } catch (err) { console.warn("fx error", err); }
+  }
+  fxPlaying = false;
+}
+
+async function playFxEvent(ev) {
+  if (!view) return;
+  if (ev.t === "move") {
+    view.playMove(ev.key, ev.path);
+    await sleep(ev.path.length * 160 + 150);
+  } else if (ev.t === "roll") {
+    ui.showBanner(`🎲 ${ev.hero} rolls...`, 1200);
+    await view.rollDice3D(ev.dice.map((n) => ({ kind: "num", value: n })), "move");
+    ui.showBanner(`👣 ${ev.dice[0] + ev.dice[1]} steps`, 1300);
+    await sleep(700);
+    view.clearDice3D();
+  } else if (ev.t === "dice") {
+    ui.showBanner(`⚔ ${ev.attacker} attacks ${ev.defender}!`, 1300);
+    await sleep(1000);
+    await view.rollDice3D(ev.atk.map((f) => ({ kind: f })), "attack");
+    await sleep(400);
+    await view.rollDice3D(ev.def.map((f) => ({ kind: f })), "defense");
+    await sleep(550);
+    view.playAttack(ev.attackerKey, ev.defenderKey);
+    try { navigator.vibrate?.(ev.damage > 0 ? [50, 40, 80] : 30); } catch { }
+    ui.showBanner(ev.damage > 0 ? `💥 ${ev.damage} damage!` : "🛡 Blocked!", 1500);
+    await sleep(1100);
+    view.clearDice3D();
+  } else if (ev.t === "card") {
+    ui.showCard(ev);
+    await sleep(2200);
+  }
 }
 
 // ---------- Game screen ----------
@@ -392,10 +431,11 @@ function monsterAttack(s, monster, hero, dice) {
   const shields = def.filter((f) => f === "white").length;
   const damage = Math.max(0, skulls - shields);
   const atkName = MONSTERS[monster.type].name;
-  s.lastDice = {
+  (s.fx ||= []).push({
+    t: "dice",
     attacker: atkName, defender: HEROES[hero.id].name, atk, def, shieldFace: "white", damage,
     attackerKey: `mob_${monster.id}`, defenderKey: `hero_${hero.id}`,
-  };
+  });
   s.log.push({ t: "combat", text: `${atkName} ⚔ ${HEROES[hero.id].name}: ${skulls} skulls vs ${shields} shields → ${damage} damage.` });
   if (damage > 0) {
     hero.body = Math.max(0, hero.body - damage);

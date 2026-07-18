@@ -84,6 +84,9 @@ function pushLog(s, text, kind = "info") {
   if (s.log.length > 60) s.log.shift();
 }
 
+// Οπτικά events με σειρά — παίζονται σεκάνς στους clients
+function pushFx(s, ev) { (s.fx ||= []).push(ev); }
+
 function rng(s) {
   // Το RNG προχωράει ντετερμινιστικά με βάση seed + πλήθος κλήσεων
   const r = makeRng(s.seed + s.rngCalls * 7919);
@@ -192,11 +195,12 @@ function resolveAttack(s, attacker, defender, attackDice, attackerIsMonster) {
 
   const atkName = attackerIsMonster ? MONSTERS[attacker.type].name : HEROES[attacker.id].name;
   const defName = defenderIsHero ? HEROES[defender.id].name : MONSTERS[defender.type].name;
-  s.lastDice = {
+  pushFx(s, {
+    t: "dice",
     attacker: atkName, defender: defName, atk, def, shieldFace, damage,
     attackerKey: attackerIsMonster ? `mob_${attacker.id}` : `hero_${attacker.id}`,
     defenderKey: defenderIsHero ? `hero_${defender.id}` : `mob_${defender.id}`,
-  };
+  });
   pushLog(s, `${atkName} ⚔ ${defName}: ${skulls} skulls vs ${shields} shields → ${damage} damage.`, "combat");
 
   if (damage > 0) {
@@ -216,7 +220,7 @@ export const commands = {
     const dice = [rollDie(r), rollDie(r)];
     s.turn.moveRoll = dice;
     s.turn.moved = 0;
-    s.lastRoll = { hero: HEROES[activeHero(s).id].name, dice };
+    pushFx(s, { t: "roll", hero: HEROES[activeHero(s).id].name, dice });
     pushLog(s, `${HEROES[activeHero(s).id].name} rolls movement: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, "roll");
     return true;
   },
@@ -262,7 +266,7 @@ export const commands = {
       }
       if (s.phase !== "playing") break;
     }
-    if (walked.length) (s.fxMoves ||= []).push({ key: `hero_${hero.id}`, path: walked });
+    if (walked.length) pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked });
     return true;
   },
 
@@ -341,7 +345,7 @@ export const commands = {
       if (special.gold) hero.gold += special.gold;
       if (special.artifact) hero.artifacts.push(special.artifact);
       pushLog(s, `🎁 ${special.text}`, "treasure");
-      s.lastCard = { text: special.text, kind: "special" };
+      pushFx(s, { t: "card", text: special.text, kind: "special" });
       return true;
     }
 
@@ -355,10 +359,10 @@ export const commands = {
     if (!card.returns) s.deckExcluded.push(card.id);
 
     pushLog(s, `🃏 ${card.text}`, "treasure");
-    s.lastCard = {
-      text: card.text,
+    pushFx(s, {
+      t: "card", text: card.text,
       kind: card.wandering ? "monster" : card.damage ? "hazard" : card.potion ? "potion" : "gold",
-    };
+    });
     if (card.gold) hero.gold += card.gold;
     if (card.potion) hero.potions.push(card.potion);
     if (card.damage) damageHero(s, hero, card.damage, "hazard");

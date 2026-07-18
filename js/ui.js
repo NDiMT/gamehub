@@ -150,91 +150,15 @@ export function createUI() {
     el.log.scrollTop = el.log.scrollHeight;
   }
 
-  // ---------- Dice tray: ζάρια ένα-ένα, με tumbling πριν «κάτσουν» ----------
-  const faceGlyph = (f) => (f === "skull" ? "💀" : "🛡");
-  const COMBAT_GLYPHS = ["💀", "🛡", "💀"];
-  const NUM_GLYPHS = ["1", "2", "3", "4", "5", "6"];
-
-  function clearTrayTimers() {
-    (el.dice._timers || []).forEach(clearTimeout);
-    (el.dice._intervals || []).forEach(clearInterval);
-    el.dice._timers = [];
-    el.dice._intervals = [];
-  }
-  const later = (fn, ms) => el.dice._timers.push(setTimeout(fn, ms));
-
-  // Ρίχνει ένα ζάρι μέσα στο set: tumbling με εναλλαγή όψεων, μετά «κάθεται»
-  function rollDieInto(setEl, finalHTML, glyphs, tumbleMs) {
-    const die = document.createElement("span");
-    die.className = "die rolling";
-    die.textContent = glyphs[0];
-    setEl.appendChild(die);
-    let gi = 0;
-    const cycle = setInterval(() => {
-      die.textContent = glyphs[++gi % glyphs.length];
-    }, 85);
-    el.dice._intervals.push(cycle);
-    later(() => {
-      clearInterval(cycle);
-      die.outerHTML = finalHTML;
-      const settled = setEl.lastElementChild;
-      settled.classList.add("settle");
-      try { navigator.vibrate?.(12); } catch { }
-    }, tumbleMs);
-  }
-
-  function showCombatDice(d) {
-    clearTrayTimers();
-    el.dice.innerHTML = `
-      <div class="tray-row"><span class="tray-name atk">${d.attacker}</span>
-        <span class="dice-set" data-set="atk"></span></div>
-      <div class="tray-row"><span class="tray-name def">${d.defender}</span>
-        <span class="dice-set" data-set="def"></span></div>
-      <div class="tray-result"></div>`;
-    el.dice.classList.remove("hidden");
-
-    const atkSet = el.dice.querySelector('[data-set="atk"]');
-    const defSet = el.dice.querySelector('[data-set="def"]');
-    const seq = [
-      ...d.atk.map((f) => ({ set: atkSet, f })),
-      ...d.def.map((f) => ({ set: defSet, f })),
-    ];
-    const STEP = 340, TUMBLE = 480;
-    seq.forEach((item, i) => {
-      later(() => rollDieInto(
-        item.set,
-        `<span class="die ${item.f}">${faceGlyph(item.f)}</span>`,
-        COMBAT_GLYPHS, TUMBLE
-      ), i * STEP);
-    });
-    const total = seq.length * STEP + TUMBLE;
-    later(() => {
-      const res = el.dice.querySelector(".tray-result");
-      res.className = "tray-result show " + (d.damage > 0 ? "hit" : "block");
-      res.textContent = d.damage > 0 ? `💥 ${d.damage} damage` : "🛡 Blocked!";
-      try { navigator.vibrate?.(d.damage > 0 ? [40, 30, 60] : 25); } catch { }
-    }, total + 320);
-    later(() => el.dice.classList.add("hidden"), total + 2300);
-  }
-
-  function showMoveDice(roll) {
-    clearTrayTimers();
-    el.dice.innerHTML = `
-      <div class="tray-row"><span class="tray-name">${roll.hero} moves</span>
-        <span class="dice-set" data-set="mv"></span></div>
-      <div class="tray-result"></div>`;
-    el.dice.classList.remove("hidden");
-    const set = el.dice.querySelector('[data-set="mv"]');
-    roll.dice.forEach((n, i) => {
-      later(() => rollDieInto(set, `<span class="die num">${n}</span>`, NUM_GLYPHS, 420), i * 300);
-    });
-    const total = roll.dice.length * 300 + 420;
-    later(() => {
-      const res = el.dice.querySelector(".tray-result");
-      res.className = "tray-result show";
-      res.textContent = `${roll.dice[0] + roll.dice[1]} steps`;
-    }, total + 200);
-    later(() => el.dice.classList.add("hidden"), total + 1500);
+  // ---------- Banner: σύντομα κεντρικά μηνύματα (τα ζάρια είναι πλέον 3D) ----------
+  let bannerTimer;
+  function showBanner(text, ms = 1400) {
+    el.dice.innerHTML = `<div class="banner-text">${text}</div>`;
+    el.dice.classList.remove("hidden", "banner-pop");
+    void el.dice.offsetWidth;
+    el.dice.classList.add("banner-pop");
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => el.dice.classList.add("hidden"), ms);
   }
 
   // ---------- Treasure card ----------
@@ -296,7 +220,7 @@ export function createUI() {
 
   return {
     el, show, toast, renderLobby, renderTurnBar, renderHeroCard,
-    renderActions, renderLog, showCombatDice, showMoveDice, showCard,
+    renderActions, renderLog, showBanner, showCard,
     showSpellSheet, hideSheet, maybeShowTurnBanner, showEnd,
   };
 }

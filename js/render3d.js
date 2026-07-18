@@ -3,6 +3,8 @@ import { HEROES, MONSTERS } from "./config.js";
 import { buildBoard, areaAt, key } from "./board.js";
 import { fallbackMini, fallbackProp } from "./assets.js";
 
+const IDENTITY_Q = new THREE.Quaternion();
+
 // 3D όψη του ταμπλό: tabletop αισθητική, tilted κάμερα, pan/zoom με δάχτυλα,
 // picking κελιών/μινιατούρων. Διαβάζει το state και συγχρονίζει τη σκηνή.
 
@@ -15,6 +17,8 @@ const ROOM_TINTS = {
   vault:  { light: 0xc4b4c8, dark: 0xb3a3b7 },   // μωβ σκόνη
   ritual: { light: 0xc9ada4, dark: 0xb89c93 },   // ξεθωριασμένο αίμα
   boss:   { light: 0xa89a8a, dark: 0x978979 },   // σκοτεινή γη
+  barracks: { light: 0xc8bb9e, dark: 0xb7aa8d }, // παλιό δέρμα
+  store:    { light: 0xbfb59a, dark: 0xaea489 }, // ώχρα αποθήκης
 };
 const COLORS = {
   room: 0xcdbfa8, roomDark: 0xbcae97,
@@ -77,6 +81,69 @@ function stoneTexture(seed = 0) {
         }
         ctx.stroke();
       }
+    }
+  });
+}
+
+// ---------- Όψεις ζαριών (canvas) ----------
+function dieFace(draw, bg = "#d9cdae") {
+  return canvasTexture(96, (ctx, s) => {
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = "rgba(40,28,16,0.8)";
+    ctx.lineWidth = 5;
+    ctx.strokeRect(3, 3, s - 6, s - 6);
+    draw(ctx, s);
+  });
+}
+
+function skullFaceTexture() {
+  return dieFace((ctx, s) => {
+    const c = s / 2;
+    ctx.fillStyle = "#2a2118";
+    // κρανίο
+    ctx.beginPath(); ctx.arc(c, c - 6, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(c - 13, c + 6, 26, 14);
+    // μάτια + μύτη
+    ctx.fillStyle = "#d9cdae";
+    ctx.beginPath(); ctx.arc(c - 9, c - 9, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c + 9, c - 9, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(c, c - 2); ctx.lineTo(c - 4, c + 5); ctx.lineTo(c + 4, c + 5); ctx.fill();
+    // δόντια
+    for (let i = -8; i <= 8; i += 5) ctx.fillRect(c + i - 1, c + 8, 2, 10);
+  });
+}
+
+function shieldFaceTexture(black = false) {
+  return dieFace((ctx, s) => {
+    const c = s / 2;
+    ctx.beginPath();
+    ctx.moveTo(c, c - 24);
+    ctx.quadraticCurveTo(c + 22, c - 20, c + 20, c - 2);
+    ctx.quadraticCurveTo(c + 18, c + 18, c, c + 28);
+    ctx.quadraticCurveTo(c - 18, c + 18, c - 20, c - 2);
+    ctx.quadraticCurveTo(c - 22, c - 20, c, c - 24);
+    ctx.fillStyle = black ? "#16151c" : "#f4f0e4";
+    ctx.fill();
+    ctx.strokeStyle = black ? "#8a88a0" : "#4a3a24";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }, black ? "#4a4858" : "#d9cdae");
+}
+
+function pipFaceTexture(n) {
+  return dieFace((ctx, s) => {
+    const pos = {
+      1: [[0.5, 0.5]],
+      2: [[0.27, 0.27], [0.73, 0.73]],
+      3: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]],
+      4: [[0.28, 0.28], [0.72, 0.28], [0.28, 0.72], [0.72, 0.72]],
+      5: [[0.26, 0.26], [0.74, 0.26], [0.5, 0.5], [0.26, 0.74], [0.74, 0.74]],
+      6: [[0.28, 0.24], [0.72, 0.24], [0.28, 0.5], [0.72, 0.5], [0.28, 0.76], [0.72, 0.76]],
+    }[n];
+    ctx.fillStyle = "#2a2118";
+    for (const [px, py] of pos) {
+      ctx.beginPath(); ctx.arc(px * s, py * s, 7.5, 0, Math.PI * 2); ctx.fill();
     }
   });
 }
@@ -150,6 +217,14 @@ export class BoardView {
     };
     this.flames = [];
     this.time = 0;
+    this.dice3d = [];
+    this.dieTextures = {
+      skull: skullFaceTexture(),
+      white: shieldFaceTexture(false),
+      black: shieldFaceTexture(true),
+      pips: [null, pipFaceTexture(1), pipFaceTexture(2), pipFaceTexture(3),
+        pipFaceTexture(4), pipFaceTexture(5), pipFaceTexture(6)],
+    };
 
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 120);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -558,6 +633,69 @@ export class BoardView {
     if (this.destMarker) this.destMarker.visible = false;
   }
 
+  // ---------- 3D ζάρια: πέφτουν ένα-ένα, αναπηδούν, κάθονται στην τελική όψη ----------
+  #makeDieMesh(spec) {
+    const T = this.dieTextures;
+    const mat = (tex) => new THREE.MeshLambertMaterial({ map: tex });
+    let faces;
+    if (spec.kind === "num") {
+      // +Y (index 2) = αποτέλεσμα
+      const others = [1, 2, 3, 4, 5, 6].filter((n) => n !== spec.value);
+      faces = [mat(T.pips[others[0]]), mat(T.pips[others[1]]), mat(T.pips[spec.value]),
+        mat(T.pips[others[2]]), mat(T.pips[others[3]]), mat(T.pips[others[4]])];
+    } else {
+      // πραγματική κατανομή όψεων: 3 κρανία, 2 λευκές, 1 μαύρη
+      const pool = { skull: 3, white: 2, black: 1 };
+      pool[spec.kind]--;
+      const rest = [];
+      for (const [k, count] of Object.entries(pool)) for (let i = 0; i < count; i++) rest.push(k);
+      faces = [mat(T[rest[0]]), mat(T[rest[1]]), mat(T[spec.kind]),
+        mat(T[rest[2]]), mat(T[rest[3]]), mat(T[rest[4]])];
+    }
+    const die = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.52, 0.52), faces);
+    return die;
+  }
+
+  #diceFocus() {
+    return new THREE.Vector3(
+      this.center.x + this.panOffset.x, 0, this.center.z + this.panOffset.y);
+  }
+
+  // Ρίχνει τα ζάρια ΕΝΑ-ΕΝΑ. style: "attack" | "defense" | "move" (σειρά στο τραπέζι)
+  rollDice3D(specs, style = "move") {
+    const focus = this.#diceFocus();
+    const rowZ = style === "attack" ? -0.7 : style === "defense" ? 1.1 : 0.2;
+    const STAGGER = 440, FLIGHT = 780;
+    specs.forEach((spec, i) => {
+      setTimeout(() => {
+        const mesh = this.#makeDieMesh(spec);
+        const to = new THREE.Vector3(
+          focus.x + (i - (specs.length - 1) / 2) * 0.64,
+          0.26,
+          focus.z + rowZ
+        );
+        const from = to.clone().add(new THREE.Vector3(
+          (Math.random() - 0.5) * 1.6, 3.2 + Math.random(), 2.2 + Math.random()));
+        mesh.position.copy(from);
+        mesh.quaternion.random();
+        this.scene.add(mesh);
+        this.dice3d.push({
+          mesh, from, to, t: 0, dur: FLIGHT / 1000,
+          spinAxis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
+          spinSpeed: 9 + Math.random() * 5,
+          fading: false,
+        });
+        try { navigator.vibrate?.(12); } catch { }
+      }, i * STAGGER);
+    });
+    // συνολική διάρκεια: stagger + πτήση + μικρό settle
+    return new Promise((r) => setTimeout(r, (specs.length - 1) * STAGGER + FLIGHT + 320));
+  }
+
+  clearDice3D() {
+    for (const d of this.dice3d) d.fading = true;
+  }
+
   // Lunge: ο επιτιθέμενος ορμάει προς τον στόχο, ο στόχος τραντάζεται·
   // το lerp προς το targetPos τους επαναφέρει ομαλά.
   playAttack(attackerKey, defenderKey) {
@@ -648,6 +786,38 @@ export class BoardView {
       if (f.core) f.core.scale.setScalar(0.9 + Math.abs(Math.sin(this.time * 14 + f.phase)) * 0.3);
       f.glow.material.opacity = 0.1 + Math.abs(Math.sin(this.time * 9 + f.phase)) * 0.1;
     }
+    // 3D ζάρια
+    for (let i = this.dice3d.length - 1; i >= 0; i--) {
+      const d = this.dice3d[i];
+      if (d.fading) {
+        d.mesh.scale.multiplyScalar(1 - dt * 6);
+        if (d.mesh.scale.x < 0.05) {
+          this.scene.remove(d.mesh);
+          this.dice3d.splice(i, 1);
+        }
+        continue;
+      }
+      d.t = Math.min(1, d.t + dt / d.dur);
+      const t = d.t;
+      d.mesh.position.x = d.from.x + (d.to.x - d.from.x) * t;
+      d.mesh.position.z = d.from.z + (d.to.z - d.from.z) * t;
+      if (t < 0.72) {
+        // κύρια πτήση: παραβολή
+        const ft = t / 0.72;
+        d.mesh.position.y = d.from.y + (d.to.y - d.from.y) * ft + Math.sin(ft * Math.PI) * 0.9;
+        d.mesh.rotateOnAxis(d.spinAxis, d.spinSpeed * dt);
+      } else {
+        // αναπήδηση + ευθυγράμμιση στην τελική όψη
+        const bt = (t - 0.72) / 0.28;
+        d.mesh.position.y = d.to.y + Math.abs(Math.sin(bt * Math.PI)) * 0.22 * (1 - bt);
+        d.mesh.quaternion.slerp(IDENTITY_Q, Math.min(1, dt * 14));
+        if (!d.landed && bt > 0.05) {
+          d.landed = true;
+          try { navigator.vibrate?.(18); } catch { }
+        }
+      }
+    }
+
     if (this.lanternTarget) this.lantern.position.lerp(this.lanternTarget, Math.min(1, dt * 5));
     this.lantern.intensity = 17 + Math.sin(this.time * 7) * 2.2;
 

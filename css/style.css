@@ -345,7 +345,7 @@ input {
 
 #dice-tray {
   position: absolute;
-  top: 46%; left: 50%;
+  top: 30%; left: 50%;
   transform: translate(-50%, -50%);
   background: radial-gradient(ellipse at top, #2a1c0e, #17100a);
   border: 2px solid var(--panel-border);
@@ -356,6 +356,12 @@ input {
   pointer-events: none;
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.75), inset 0 0 24px rgba(0, 0, 0, 0.6);
   min-width: 230px;
+}
+.banner-text { font-size: 1.05rem; letter-spacing: 1px; color: var(--parchment); white-space: nowrap; }
+.banner-pop { animation: bannerPop 0.3s cubic-bezier(0.2, 1.6, 0.4, 1); }
+@keyframes bannerPop {
+  from { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
 .tray-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 6px 0; }
 .tray-name { font-size: 0.78rem; opacity: 0.85; font-style: italic; }
