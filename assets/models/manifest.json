@@ -1,0 +1,72 @@
+{
+  "generatedAt": "2026-07-18T07:45:47.826Z",
+  "models": [
+    {
+      "name": "hero_warrior",
+      "file": "assets/models/hero_warrior.glb",
+      "bytes": 4247856,
+      "taskId": "019f742e-1f1f-7121-a4af-f571c5775367"
+    },
+    {
+      "name": "hero_sapper",
+      "file": "assets/models/hero_sapper.glb",
+      "bytes": 4228796,
+      "taskId": "019f742e-b3b7-7b22-83a4-0a83c0032af1"
+    },
+    {
+      "name": "hero_shadowarcher",
+      "file": "assets/models/hero_shadowarcher.glb",
+      "bytes": 3623556,
+      "taskId": "019f742e-575c-712b-b6f1-782a5b02fb8f"
+    },
+    {
+      "name": "hero_mystic",
+      "file": "assets/models/hero_mystic.glb",
+      "bytes": 3338320,
+      "taskId": "019f742e-81ab-7b13-8cb9-df38b3f34f77"
+    },
+    {
+      "name": "mob_grunt",
+      "file": "assets/models/mob_grunt.glb",
+      "bytes": 3966952,
+      "taskId": "019f742e-81fd-7b15-a21e-c2a18e79a2e5"
+    },
+    {
+      "name": "mob_hollow",
+      "file": "assets/models/mob_hollow.glb",
+      "bytes": 4365392,
+      "taskId": "019f742e-5108-7b0c-a6e2-4965c8aa047a"
+    },
+    {
+      "name": "mob_acolyte",
+      "file": "assets/models/mob_acolyte.glb",
+      "bytes": 3567340,
+      "taskId": "019f742e-1f18-7c71-9b07-645da8309df8"
+    },
+    {
+      "name": "boss_stonewrath",
+      "file": "assets/models/boss_stonewrath.glb",
+      "bytes": 4965048,
+      "taskId": "019f742e-4ff1-7c74-818d-d89ee7935e2a"
+    },
+    {
+      "name": "prop_door",
+      "file": "assets/models/prop_door.glb",
+      "bytes": 4237396,
+      "taskId": "019f742e-822f-7b16-b841-55729cf74f68"
+    },
+    {
+      "name": "prop_chest",
+      "file": "assets/models/prop_chest.glb",
+      "bytes": 3653980,
+      "taskId": "019f742e-81f3-7b14-8be9-688098f7972e"
+    },
+    {
+      "name": "prop_stairs",
+      "file": "assets/models/prop_stairs.glb",
+      "bytes": 3816768,
+      "taskId": "019f742e-b464-7b23-ba1b-81e89eee969b"
+    }
+  ],
+  "failures": []
+}
