@@ -44,7 +44,10 @@ export function createUI() {
       const div = document.createElement("button");
       div.className = "hero-slot" + (taken ? " taken" : "") + (taken?.seat === mySeat ? " mine" : "");
       div.innerHTML = `
-        <span class="hero-dot" style="background:#${def.color.toString(16).padStart(6, "0")}"></span>
+        <span class="hero-avatar">
+          <img src="assets/art/portrait_${heroId}.webp" alt="" onerror="this.remove()" />
+          <span class="hero-dot" style="background:#${def.color.toString(16).padStart(6, "0")}"></span>
+        </span>
         <span class="hero-name">${def.name} <small>${def.title}</small>
           <span class="hero-stats">⚔${def.attack} 🛡${def.defense} ❤${def.body} 🧠${def.mind} — ${def.blurb}</span>
         </span>
@@ -180,8 +183,8 @@ export function createUI() {
     el.card.innerHTML = `
       <div class="tcard ${cardInfo.kind}">
         <div class="tcard-inner">
-          <div class="tcard-back">🃏</div>
-          <div class="tcard-front">
+          <div class="tcard-back" style="background-image:url('assets/art/card_back.webp')">🃏</div>
+          <div class="tcard-front" style="background-image:url('assets/art/card_${cardInfo.kind}.webp')">
             <div class="tcard-icon">${icons[cardInfo.kind] || "🃏"}</div>
             <div class="tcard-text">${cardInfo.text}</div>
           </div>

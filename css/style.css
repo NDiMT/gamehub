@@ -46,7 +46,16 @@ html, body {
     radial-gradient(ellipse at center, #1c1310 0%, #0d0906 80%);
 }
 
-.title-block { display: flex; flex-direction: column; gap: 4px; }
+.title-block { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+#logo-art {
+  width: min(360px, 90vw);
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7), 0 0 30px rgba(201, 162, 39, 0.15);
+}
+.title-block.has-art .title-rule,
+.title-block.has-art .logo,
+.title-block.has-art .tagline { display: none; }
 .title-rule { color: var(--gold); letter-spacing: 10px; font-size: 0.9rem; opacity: 0.8; }
 
 .logo {
@@ -112,6 +121,14 @@ input {
 .hero-slot.taken { border-color: var(--gold); }
 .hero-slot.mine { background: linear-gradient(180deg, #5a3f1e, #3d2a12); box-shadow: 0 0 12px rgba(201, 162, 39, 0.35); }
 .hero-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+.hero-avatar { position: relative; display: flex; align-items: center; }
+.hero-avatar img {
+  width: 48px; height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--panel-border);
+}
+.hero-avatar img + .hero-dot { position: absolute; right: -4px; bottom: -4px; width: 12px; height: 12px; border: 2px solid #17100a; }
 .hero-name small { color: var(--gold-hi); font-style: italic; }
 .hero-stats { display: block; font-size: 0.72rem; opacity: 0.65; margin-top: 2px; font-family: system-ui, sans-serif; }
 .hero-by { font-size: 0.72rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
@@ -346,15 +363,31 @@ input {
   background:
     radial-gradient(circle at center, rgba(201, 162, 39, 0.25), transparent 65%),
     repeating-linear-gradient(45deg, #241a0d 0 10px, #1c1409 10px 20px);
+  background-size: cover;
+  background-position: center;
   font-size: 3.4rem;
 }
+.tcard-back[style*="background-image"] { font-size: 0; }
 .tcard-front {
   transform: rotateY(180deg);
   background: linear-gradient(170deg, #efe3c4, #cbb98e);
+  background-size: cover;
+  background-position: center;
   color: #2c1d08;
+  justify-content: flex-end;
+  padding: 0;
+  overflow: hidden;
 }
 .tcard-icon { font-size: 3rem; }
-.tcard-text { font-size: 0.95rem; line-height: 1.45; text-align: center; font-style: italic; }
+.tcard-front[style*="background-image"] .tcard-icon { display: none; }
+.tcard-text {
+  font-size: 0.92rem; line-height: 1.4; text-align: center; font-style: italic;
+  width: 100%;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(239, 227, 196, 0), rgba(239, 227, 196, 0.95) 30%);
+  color: #2c1d08;
+  text-shadow: 0 1px 0 #fff8;
+}
 .tcard.hazard .tcard-front, .tcard.monster .tcard-front { background: linear-gradient(170deg, #e0bfb2, #b98e83); }
 .tcard.special .tcard-front { background: linear-gradient(170deg, #f5e6b8, #d9bd6d); }
 
