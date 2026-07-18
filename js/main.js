@@ -232,7 +232,10 @@ function saveProgress() {
   for (const h of Object.values(state.heroes)) {
     heroes[h.id] = {
       // Νεκροί ήρωες: σέρνονται πίσω στην επιφάνεια — παίζουν στο επόμενο
-      // quest, αλλά το χρυσάφι τους το κράτησε η κρύπτη (χάνεται).
+      // quest. Στον θάνατο το σακίδιό τους (χρυσάφι/φίλτρα/artifacts) έπεσε
+      // ήδη ως loot pile (state.js/dropLoot): ό,τι μάζεψε σύντροφος ανήκει
+      // πλέον σε ΕΚΕΙΝΟΝ (σώζεται με το δικό του gold), ό,τι έμεινε κάτω το
+      // κράτησε η κρύπτη. Το `? : 0` είναι δικλείδα — δεν διπλομετράει ποτέ.
       gold: h.alive ? h.gold : 0,
       potions: [...h.potions],
       artifacts: h.artifacts.filter((a) => !a.relic), // κειμήλια = παραδίδονται
@@ -519,15 +522,17 @@ async function playFxEvent(ev) {
     await sleep(800);
     view.clearDice3D();
   } else if (ev.t === "trapdie") {
-    // Παγίδα με ζαριά διαφυγής: μικρό δράμα αντί για αόρατο roll
+    // Παγίδα/άλμα/αφόπλιση με ζαριά: μικρό δράμα αντί για αόρατο roll.
+    // Προαιρετικά hitText/missText (π.χ. "Falls in!" / "Cleared!" στο άλμα).
+    const outcome = ev.hit ? (ev.hitText || "💥 Hit!") : (ev.missText || "😮‍💨 Dodged!");
     if (fxFast) {
-      ui.showBanner(`${ev.text} ${ev.hit ? "💥 Hit!" : "😮‍💨 Dodged!"}`, 900);
+      ui.showBanner(`${ev.text} ${outcome}`, 900);
       return sleep(500);
     }
     ui.showBanner(ev.text, 1200);
     await sleep(800);
     await view.rollDice3D([{ kind: ev.face }], "attack");
-    ui.showBanner(ev.hit ? "💥 Hit!" : "😮‍💨 Dodged!", 1200);
+    ui.showBanner(outcome, 1200);
     await sleep(700);
     view.clearDice3D();
   } else if (ev.t === "banner") {
@@ -686,7 +691,11 @@ const handlers = {
   beginDisarm: () => {
     if (!targetCellsFor(state, "disarm").length) return ui.toast("No revealed trap within reach.");
     uiMode.selecting = "disarm";
-    ui.toast("Tap the trap to disarm");
+    // Sapper: αποτυγχάνει μόνο στη μαύρη· Satchel: και η νεκροκεφαλή αστοχεί
+    const hero = state.heroes[state.turnOrder[state.turnIndex]];
+    ui.toast(HEROES[hero.id].trait === "disarm"
+      ? "Tap the trap to disarm (black die face springs it)"
+      : "Tap the trap — satchel: skull slips, black springs it");
     refreshActions(state); highlightForMode(state);
   },
   beginSpell: () => {
@@ -727,6 +736,18 @@ function armedTrapCells(s) {
     if (!t.cell || t.type === "chest") continue;
     const ts = s.traps[t.id];
     if (ts.revealed && !ts.disarmed && !ts.triggered) set.add(key(t.cell[0], t.cell[1]));
+  }
+  return set;
+}
+
+// Κελιά λάκκων που ΠΗΔΙΟΥΝΤΑΙ (γνωστός οπλισμένος ή ανοιχτός λάκκος) —
+// ίδιος κανόνας με το state.js/move για την προειδοποίηση στο preview
+function jumpPitCells(s) {
+  const set = new Set();
+  for (const t of s.quest.traps || []) {
+    if (!t.cell || t.type !== "pit") continue;
+    const ts = s.traps[t.id];
+    if (!ts.disarmed && (ts.triggered || ts.revealed)) set.add(key(t.cell[0], t.cell[1]));
   }
   return set;
 }
@@ -885,7 +906,11 @@ function onCellTap({ x, y }) {
   if (!stops.has(key(x, y))) { uiMode.pendingMove = null; refreshActions(state); highlightForMode(state); return; }
   const path = pathTo(prev, hero.x, hero.y, x, y);
   uiMode.pendingMove = { x, y, path, at: Date.now() };
-  if (armedTrapCells(state).has(key(x, y))) ui.toast("⚠ There is an armed trap on that square!");
+  // Η διαδρομή διασχίζει γνωστό λάκκο (όχι ως προορισμό); → άλμα με ρίσκο
+  const pits = jumpPitCells(state);
+  const crossesPit = path.slice(0, -1).some(([px, py]) => pits.has(key(px, py)));
+  if (crossesPit) ui.toast("⚠ Jumping the pit — a skull means you fall!");
+  else if (armedTrapCells(state).has(key(x, y))) ui.toast("⚠ There is an armed trap on that square!");
   refreshActions(state);
   highlightForMode(state);
 }

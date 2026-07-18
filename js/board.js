@@ -62,13 +62,23 @@ export function reachableCells(board, state, actor, movesLeft, { isMonster = fal
     (board.quest.furniture || []).filter((f) => f.type !== "stairs").map((f) => f.cell.join(","))
   );
   // Γνωστές οπλισμένες παγίδες: ο ήρωας δεν τις ΔΙΑΣΧΙΖΕΙ κατά λάθος —
-  // μπορεί όμως να τις πατήσει συνειδητά ως προορισμό.
-  const trapStop = new Set();
+  // μπορεί όμως να τις πατήσει συνειδητά ως προορισμό. ΕΞΑΙΡΕΣΗ οι λάκκοι:
+  // αποκαλυμμένος οπλισμένος ή ανοιγμένος (triggered) λάκκος ΠΗΔΙΕΤΑΙ —
+  // περνάς από πάνω με κανονικό κόστος κίνησης, αλλά το state.js/move ρίχνει
+  // ζαριά άλματος (νεκροκεφαλή = πτώση). Ανοιχτός λάκκος δεν είναι προορισμός.
+  const trapStop = new Set();  // δόρατα: όχι διέλευση, μόνο συνειδητή στάση
+  const openPit = new Set();   // ανοιχτοί λάκκοι: διέλευση με άλμα, όχι στάση
   if (!isMonster) {
     for (const t of board.quest.traps || []) {
       if (!t.cell || t.type === "chest") continue;
       const ts = state.traps?.[t.id];
-      if (ts?.revealed && !ts.disarmed && !ts.triggered) trapStop.add(t.cell.join(","));
+      if (t.type === "pit") {
+        if (ts?.triggered && !ts.disarmed) openPit.add(t.cell.join(","));
+        // αποκαλυμμένος οπλισμένος λάκκος: περατός (άλμα) ΚΑΙ έγκυρη στάση
+        // (συνειδητό πάτημα = σκάει κανονικά) — άρα ΔΕΝ μπαίνει σε trapStop
+      } else if (ts?.revealed && !ts.disarmed && !ts.triggered) {
+        trapStop.add(t.cell.join(","));
+      }
     }
   }
   const dist = new Map([[key(actor.x, actor.y), 0]]);
@@ -112,6 +122,7 @@ export function reachableCells(board, state, actor, movesLeft, { isMonster = fal
     const [x, y] = k.split(",").map(Number);
     if (x === actor.x && y === actor.y) continue;
     if (occupiedByHero(state, x, y) || occupiedByMonster(state, x, y)) continue;
+    if (openPit.has(k)) continue; // ανοιχτή τρύπα: την πηδάς, δεν στέκεσαι μέσα
     stops.add(k);
   }
   return { stops, dist, prev };

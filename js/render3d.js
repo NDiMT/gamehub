@@ -669,6 +669,27 @@ export class BoardView {
       } else mesh.userData.glowing = false;
     }
 
+    // Σακίδια πεσμένων ηρώων (state.lootPiles): μικρό λαμπερό σημάδι στο
+    // κελί — εμφανίζεται σε αποκαλυμμένη περιοχή, φεύγει μόλις μαζευτεί.
+    this.lootMeshes ||= new Map();
+    const wantLoot = new Set();
+    for (const p of state.lootPiles || []) {
+      const k = `${p.x},${p.y}`;
+      wantLoot.add(k);
+      let mesh = this.lootMeshes.get(k);
+      if (!mesh) {
+        mesh = this.#makeLootMarker();
+        mesh.position.set(p.x + 0.5, 0, p.y + 0.5);
+        this.scene.add(mesh);
+        this.lootMeshes.set(k, mesh);
+      }
+      const area = areaAt(this.board, p.x, p.y);
+      mesh.visible = !!(area && state.revealed[area]);
+    }
+    for (const [k, mesh] of this.lootMeshes) {
+      if (!wantLoot.has(k)) { this.scene.remove(mesh); this.lootMeshes.delete(k); }
+    }
+
     // Ήρωες
     for (const hero of Object.values(state.heroes)) {
       let piece = this.pieces.get(`hero_${hero.id}`);
@@ -699,6 +720,35 @@ export class BoardView {
 
   setLantern(x, y) {
     this.lanternTarget = new THREE.Vector3(x + 0.5, 2.1, y + 0.5);
+  }
+
+  // Σημάδι λαφύρου: μικρό σεντούκι (ή χρυσό «σακί» fallback) + φωτεινό δαχτυλίδι
+  #makeLootMarker() {
+    const g = new THREE.Group();
+    if (this.models.prop_chest) {
+      const chest = this.models.prop_chest.clone();
+      chest.scale.setScalar(0.45);
+      g.add(chest);
+    } else {
+      const sack = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 8, 8),
+        new THREE.MeshLambertMaterial({ color: 0xc9a84c })
+      );
+      sack.position.y = 0.15;
+      sack.scale.y = 0.8;
+      g.add(sack);
+    }
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.32, 0.03, 6, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd24a, transparent: true, opacity: 0.7,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.06;
+    g.add(ring);
+    return g;
   }
 
   // Δαχτυλίδι-στόχος στο κελί προορισμού (move preview)
@@ -916,6 +966,16 @@ export class BoardView {
           d.landed = true;
           try { navigator.vibrate?.(18); } catch { }
         }
+      }
+    }
+
+    // Παλμός στα σημάδια λαφύρων πεσμένων ηρώων
+    if (this.lootMeshes) {
+      for (const mesh of this.lootMeshes.values()) {
+        if (!mesh.visible) continue;
+        const pulse = 1 + Math.sin(this.time * 5) * 0.1;
+        mesh.scale.setScalar(pulse);
+        mesh.position.y = Math.abs(Math.sin(this.time * 5)) * 0.05;
       }
     }
 

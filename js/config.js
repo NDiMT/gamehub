@@ -126,8 +126,10 @@ export const DREAD_SPELLS = {
 // Τα μπόνους εφαρμόζονται όπως των artifacts (gearBonus στο state.js):
 //   attackBonus/defenseBonus = +ζάρια μάχης, moveDice = +ζάρι κίνησης,
 //   thrownRange/thrownDice = επίθεση εξ αποστάσεως για μη-τοξότες.
-// Το toolkit ΠΩΛΕΙΤΑΙ/αποθηκεύεται εδώ ως equipment {id:"toolkit"} —
-// η χρήση του (disarm για κάθε ήρωα) υλοποιείται σε επόμενο βήμα.
+// Το toolkit (Sapper's Satchel) δίνει Disarm σε ΚΑΘΕ ήρωα, αλλά χειρότερα
+// από τον sapper: μαύρη ασπίδα = η παγίδα σκάει (όπως sapper), νεκροκεφαλή =
+// ΑΠΟΤΥΧΙΑ (χάνεται η ενέργεια, η παγίδα μένει οπλισμένη), λευκή = επιτυχία.
+// Ο sapper αποτυγχάνει ΜΟΝΟ στη μαύρη — μένει αυστηρά καλύτερος.
 // consumable: μπαίνει στα potions του ήρωα, αγοράζεται πολλές φορές.
 export const ARMORY = [
   { id: "keenwhet", name: "Keenwhet Blade", icon: "🗡", cost: 250, attackBonus: 1,
@@ -141,21 +143,28 @@ export const ARMORY = [
   { id: "sablefangs", name: "Sable Fangs", icon: "🔪", cost: 120, thrownRange: 2, thrownDice: 2,
     desc: "Balanced throwing irons: attack a foe up to 2 squares away with 2 dice." },
   { id: "toolkit", name: "Sapper's Satchel", icon: "🧰", cost: 130,
-    desc: "Picks, shims and steady hands — trap-disarming tools for any hero." },
+    desc: "Trap-disarming tools for any hero. Roll 1 die: black springs the trap, skull merely fails." },
   { id: "draught", name: "Healing Draught", icon: "🧪", cost: 60, consumable: true, potion: "heal2",
     desc: "Restores 2 Body. Drink on your turn. Buy as many as you can carry." },
   { id: "wrathroot", name: "Wrathroot Tonic", icon: "⚗️", cost: 50, consumable: true, potion: "str1",
     desc: "+1 attack die on your next attack. Buy as many as you can carry." },
 ];
 
+// Ρόλοι AI (Digital DM, js/ai.js):
+//   flank  — γρήγορα/εύθραυστα: προτιμούν ήρωες που ΔΕΝ πολεμούν ήδη με τέρας
+//   guard  — φρουροί: αν η αρχική τους αίθουσα έχει στόχο quest (boss/κειμήλιο),
+//            δεν την εγκαταλείπουν μέχρι να μπει ήρωας μέσα
+//   caster — μένουν 1 κελί πίσω και φτύνουν κατάρα: ranged = "hexspit"
+//            (εμβέλεια 2 + οπτική επαφή, ζάρια επίθεσης του ranged.dice)
 export const MONSTERS = {
   grunt: { id: "grunt", name: "Grunt", move: 10, attack: 2, defense: 1, body: 1, color: 0x5a8f3c },
   hollow: { id: "hollow", name: "Hollow", move: 6, attack: 2, defense: 2, body: 1, color: 0xb8b8a8 },
-  acolyte: { id: "acolyte", name: "Acolyte", move: 6, attack: 3, defense: 3, body: 2, color: 0x4a3060 },
+  acolyte: { id: "acolyte", name: "Acolyte", move: 6, attack: 3, defense: 3, body: 2, color: 0x4a3060,
+    role: "caster", ranged: { id: "hexspit", name: "Hexspit", range: 2, dice: 2 } },
   stonewrath: { id: "stonewrath", name: "STONEWRATH", move: 6, attack: 4, defense: 4, body: 3, color: 0x707078, boss: true },
-  wraith: { id: "wraith", name: "Wraith", move: 8, attack: 2, defense: 3, body: 1, color: 0x8ab8d8 },
-  rotfang: { id: "rotfang", name: "Rotfang", move: 12, attack: 1, defense: 1, body: 1, color: 0x9a6a4a },
-  dreadknight: { id: "dreadknight", name: "Dread Knight", move: 5, attack: 4, defense: 3, body: 2, color: 0x3a3a48 },
+  wraith: { id: "wraith", name: "Wraith", move: 8, attack: 2, defense: 3, body: 1, color: 0x8ab8d8, role: "flank" },
+  rotfang: { id: "rotfang", name: "Rotfang", move: 12, attack: 1, defense: 1, body: 1, color: 0x9a6a4a, role: "flank" },
+  dreadknight: { id: "dreadknight", name: "Dread Knight", move: 5, attack: 4, defense: 3, body: 2, color: 0x3a3a48, role: "guard" },
 };
 
 // Combat die: 3 skull faces, 2 white shields, 1 black shield
@@ -179,4 +188,9 @@ export const RULES = {
   spearDamage: 1,
   fallingBlockDice: 3,
   maxPlayers: 4,
+  // Digital DM (js/dm.js): αφηγητής + pacing director + έξυπνες τακτικές.
+  // Καθαρά ντετερμινιστικό, μηδέν εξωτερικές κλήσεις — τρέχει μόνο στον host.
+  dmEnabled: true,
+  dmStallRounds: 4,   // γύροι χωρίς πρόοδο πριν βγει περίπολος
+  dmMaxPatrols: 3,    // ανώτατο όριο περιπόλων ανά quest
 };

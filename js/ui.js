@@ -164,7 +164,10 @@ export function createUI() {
     if (hero.spells?.length) mkIcon("spell", "✨", "Spell", handlers.beginSpell, actionDone);
     mkIcon("loot", "🔍", "Loot", handlers.searchTreasure, actionDone);
     mkIcon("inspect", "🕯", "Inspect", handlers.searchTraps, actionDone);
-    if (HEROES[hero.id].trait === "disarm") mkIcon("disarm", "🔧", "Disarm", handlers.beginDisarm, actionDone);
+    // Disarm: ο sapper εκ φύσεως, οι υπόλοιποι με το Sapper's Satchel (toolkit)
+    const canDisarm = HEROES[hero.id].trait === "disarm" ||
+      (hero.equipment || []).some((e) => e.id === "toolkit");
+    if (canDisarm) mkIcon("disarm", "🔧", "Disarm", handlers.beginDisarm, actionDone);
     if (hero.potions.length) {
       const plabel = hero.potions.length > 1 ? `Potion ×${hero.potions.length}` : "Potion";
       mkIcon("potion", "🧪", plabel, handlers.drinkPotion, state.turn.over);

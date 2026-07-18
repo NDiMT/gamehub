@@ -300,6 +300,7 @@ input {
 .log-kill { color: #a8ffc9; }
 .log-reveal { color: #a0cfff; }
 .log-intro { color: var(--parchment); }
+.log-dm { color: #d8c48a; font-style: italic; } /* η φωνή του Φύλακα (🕯) */
 #game-log div:last-child { animation: logIn 0.35s ease both; }
 @keyframes logIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 

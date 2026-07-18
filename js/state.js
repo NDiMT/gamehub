@@ -7,6 +7,10 @@ import {
   buildBoard, areaAt, key, isAdjacent, lineOfSight,
   reachableCells, cellsOfArea, isWalkable,
 } from "./board.js";
+import {
+  initDm, dmRoomReveal, dmEvent, dmMonsterSlain, dmHeroHurt,
+  dmAttackResolved, dmMercyRedraw,
+} from "./dm.js";
 
 // mulberry32 — μικρό deterministic PRNG
 export function makeRng(seed) {
@@ -62,6 +66,7 @@ export function createGame(quest, players, seed, carry = {}) {
     monsters[m.id] = {
       id: m.id, type: m.type, x: m.cell[0], y: m.cell[1], area: m.area,
       body: def.body, alive: true, held: false,
+      home: m.area, // αρχική αίθουσα — τη χρησιμοποιούν οι φρουροί (ai.js)
     };
   }
 
@@ -85,8 +90,10 @@ export function createGame(quest, players, seed, carry = {}) {
     round: 1,
     deckExcluded: [], // ids θησαυρών που βγήκαν από την τράπουλα
     dreadUses: {},    // πόσες φορές έριξε ο boss κάθε dread spell
+    lootPiles: [],    // σακίδια πεσμένων ηρώων: [{x, y, gold, potions, artifacts}]
     log: [{ t: "intro", text: quest.intro }],
   };
+  initDm(s); // Digital DM: αφηγητής + pacing (state.dm, ή null αν κλειστός)
   draftSpellSchools(s);
   return s;
 }
@@ -143,6 +150,7 @@ function revealArea(s, board, areaId) {
   if (!s.revealed[areaId]) {
     s.revealed[areaId] = true;
     pushLog(s, `A new area is revealed...`, "reveal");
+    dmRoomReveal(s, areaId); // ο DM περιγράφει τον χώρο (πρώτη φορά μόνο)
   }
 }
 
@@ -163,11 +171,59 @@ function damageHero(s, hero, amount, source) {
     hero.alive = false;
     pushFx(s, { t: "banner", text: `☠ ${HEROES[hero.id].name} has fallen!`, ms: 1800 });
     pushLog(s, `☠ ${HEROES[hero.id].name} has fallen!`, "death");
+    dropLoot(s, hero); // το σακίδιο πέφτει στο κελί του — οι σύντροφοι το μαζεύουν
     if (Object.values(s.heroes).every((h) => !h.alive)) {
       s.phase = "defeat";
       pushLog(s, "Darkness swallows the party. DEFEAT.", "end");
     }
   }
+  dmHeroHurt(s, hero); // αφηγητής: death's door / θάνατος ήρωα
+}
+
+// ---------- Λάφυρα πεσμένων ηρώων ----------
+// Όταν πεθαίνει ήρωας, χρυσάφι + φίλτρα + artifacts (ΚΑΙ το κειμήλιο του
+// quest — αλλιώς το retrieve κλειδώνει άλυτο) πέφτουν σε σωρό στο κελί του.
+// Ο εξοπλισμός (Armory) μένει πάνω του — τον κρατά όταν αναστηθεί στο επόμενο
+// quest. Σωροί στο ίδιο κελί συγχωνεύονται.
+function dropLoot(s, hero) {
+  if (!hero.gold && !hero.potions.length && !hero.artifacts.length) return;
+  let pile = (s.lootPiles ||= []).find((p) => p.x === hero.x && p.y === hero.y);
+  if (!pile) {
+    pile = { x: hero.x, y: hero.y, gold: 0, potions: [], artifacts: [] };
+    s.lootPiles.push(pile);
+  }
+  pile.gold += hero.gold;
+  pile.potions.push(...hero.potions);
+  pile.artifacts.push(...hero.artifacts);
+  const relic = hero.artifacts.find((a) => a.relic);
+  hero.gold = 0;
+  hero.potions = [];
+  hero.artifacts = [];
+  pushLog(s, `💼 ${HEROES[hero.id].name}'s pack hits the floor. Step on it to recover it!`, "treasure");
+  if (relic) {
+    pushFx(s, { t: "banner", text: `🏺 The ${relic.name} lies where ${HEROES[hero.id].name} fell!`, ms: 2000 });
+    pushLog(s, `🏺 The ${relic.name} lies unclaimed — someone must carry it out.`, "end");
+  }
+}
+
+// Αυτόματο μάζεμα: όποιος ήρωας πατήσει το κελί του σωρού τα παίρνει ΟΛΑ.
+function pickupLoot(s, hero) {
+  if (!hero.alive || !s.lootPiles?.length) return false;
+  const i = s.lootPiles.findIndex((p) => p.x === hero.x && p.y === hero.y);
+  if (i < 0) return false;
+  const pile = s.lootPiles.splice(i, 1)[0];
+  hero.gold += pile.gold;
+  hero.potions.push(...pile.potions);
+  hero.artifacts.push(...pile.artifacts);
+  const bits = [];
+  if (pile.gold) bits.push(`💰${pile.gold}`);
+  if (pile.potions.length) bits.push(`🧪×${pile.potions.length}`);
+  if (pile.artifacts.length) bits.push(pile.artifacts.map((a) => a.name).join(", "));
+  pushFx(s, { t: "banner", text: `💼 ${HEROES[hero.id].name} recovers a fallen pack — ${bits.join(" · ")}`, ms: 1900 });
+  pushLog(s, `💼 ${HEROES[hero.id].name} recovers a fallen comrade's pack (${bits.join(" · ")}).`, "treasure");
+  const relic = pile.artifacts.find((a) => a.relic);
+  if (relic) pushLog(s, `🏺 ${HEROES[hero.id].name} now carries the ${relic.name}. Reach the stairs!`, "end");
+  return true;
 }
 
 function damageMonster(s, monster, amount) {
@@ -177,6 +233,7 @@ function damageMonster(s, monster, amount) {
     monster.alive = false;
     pushFx(s, { t: "banner", text: `💀 ${def.name} is destroyed!`, ms: 1300 });
     pushLog(s, `💀 ${def.name} is destroyed!`, "kill");
+    dmMonsterSlain(s, monster); // αφηγητής + pacing: πρόοδος/first blood/momentum
     checkKillObjectives(s, monster);
   } else {
     pushLog(s, `${def.name} loses ${amount} Body.`, "damage");
@@ -260,6 +317,7 @@ function spawnWandering(s, board, hero) {
     if (areaAt(board, x, y) && !monsterAt(s, x, y) && !heroAt(s, x, y)) {
       const id = `w${s.rngCalls}`;
       s.monsters[id] = { id, type, x, y, area: areaAt(board, x, y), body: def.body, alive: true, held: false };
+      dmEvent(s, "wandering"); // ο αφηγητής προλογίζει το κακό
       pushFx(s, { t: "banner", text: `👁 A ${def.name} lunges from the shadows!`, ms: 1700 });
       pushLog(s, `A ${def.name} lunges out of the shadows and attacks!`, "monster");
       resolveAttack(s, s.monsters[id], hero, def.attack, true);
@@ -304,6 +362,7 @@ export function resolveAttack(s, attacker, defender, attackDice, attackerIsMonst
       damageHero(s, defender, damage, atkName);
     } else damageMonster(s, defender, damage);
   }
+  dmAttackResolved(s, damage, attackerIsMonster); // αφηγητής: big hit / whiff streak
   return damage;
 }
 
@@ -370,14 +429,21 @@ export const commands = {
     const movesLeft = s.turn.moveRoll.reduce((a, b) => a + b, 0) - s.turn.moved;
     if (!Array.isArray(path) || path.length === 0 || path.length > movesLeft) return false;
 
-    // Επικύρωση: το μονοπάτι πρέπει να είναι μέσα στα εφικτά κελιά
-    const { dist } = reachableCells(board, s, hero, movesLeft);
+    // Επικύρωση: ο προορισμός πρέπει να είναι έγκυρη ΣΤΑΣΗ (όχι πάνω σε
+    // φιγούρα, όχι μέσα σε ανοιχτό λάκκο) — τα stops είναι η μία πηγή αλήθειας.
+    const { stops } = reachableCells(board, s, hero, movesLeft);
     const dest = path[path.length - 1];
-    if (!dist.has(key(dest[0], dest[1]))) return false;
+    if (!stops.has(key(dest[0], dest[1]))) return false;
 
-    // Βήμα-βήμα: πόρτες ανοίγουν, παγίδες σκάνε
+    // Βήμα-βήμα: πόρτες ανοίγουν, παγίδες σκάνε, λάκκοι πηδιούνται
     const walked = [];
-    for (const [x, y] of path) {
+    const flushWalk = () => {
+      if (!walked.length) return;
+      pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked.slice() });
+      walked.length = 0;
+    };
+    for (let step = 0; step < path.length; step++) {
+      const [x, y] = path[step];
       hero.x = x; hero.y = y;
       walked.push([x, y]);
       s.turn.moved++;
@@ -397,30 +463,58 @@ export const commands = {
       );
       if (trapDef) {
         const ts = s.traps[trapDef.id];
-        if (!ts.triggered && !ts.disarmed) {
-          // Το βάδισμα μέχρι εδώ παίζει ΠΡΙΝ την παγίδα — σωστή σειρά στα fx
-          if (walked.length) {
-            pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked.slice() });
-            walked.length = 0;
+        const isLastStep = step === path.length - 1;
+        // ΑΛΜΑ ΛΑΚΚΟΥ: γνωστός (αποκαλυμμένος οπλισμένος ή ήδη ανοιχτός)
+        // λάκκος στη ΜΕΣΗ της διαδρομής πηδιέται με 1 ζάρι μάχης:
+        // νεκροκεφαλή = πτώση (ζημιά + inPit + τέλος γύρου εδώ), αλλιώς
+        // προσγειώνεται απέναντι και συνεχίζει. Το κόστος κίνησης είναι
+        // κανονικό (μετρήθηκε ήδη). Συνειδητή ΣΤΑΣΗ πάνω σε οπλισμένο λάκκο
+        // παραμένει κανονικό πάτημα (σκάει)· τα δόρατα δεν πηδιούνται ποτέ.
+        const knownPit = trapDef.type === "pit" && !ts.disarmed &&
+          (ts.triggered || ts.revealed);
+        if (knownPit && !isLastStep) {
+          flushWalk(); // το βάδισμα ως εδώ παίζει ΠΡΙΝ τη ζαριά
+          const r = rng(s);
+          const face = DIE_FACES[Math.floor(r() * 6)];
+          const fell = face === "skull";
+          pushFx(s, {
+            t: "trapdie", text: `🕳 ${HEROES[hero.id].name} leaps the pit!`,
+            face, hit: fell, hitText: "🕳 Falls in!", missText: "🦵 Cleared!",
+          });
+          if (fell) {
+            ts.triggered = true;
+            ts.revealed = true;
+            pushLog(s, `${HEROES[hero.id].name} misjudges the jump and falls in! Turn ends.`, "trap");
+            damageHero(s, hero, RULES.pitDamage, "pit fall");
+            hero.inPit = true;
+            s.turn.over = true;
+            break;
           }
+          pushLog(s, `${HEROES[hero.id].name} clears the pit in one leap.`, "trap");
+        } else if (!ts.triggered && !ts.disarmed) {
+          // Το βάδισμα μέχρι εδώ παίζει ΠΡΙΝ την παγίδα — σωστή σειρά στα fx
+          flushWalk();
           triggerTrap(s, board, hero, trapDef);
           if (s.turn.over) break;
         }
+      }
+
+      // Σακίδιο πεσμένου συντρόφου σε αυτό το κελί; Μαζεύεται αυτόματα.
+      if (s.lootPiles?.some((p) => p.x === x && p.y === y)) {
+        flushWalk(); // το banner του λαφύρου παίζει ΜΕΤΑ το βήμα
+        pickupLoot(s, hero);
       }
 
       // Διαφυγή (retrieve): ο κάτοχος του κειμηλίου πάτησε στα σκαλιά → νίκη.
       // Πρώτα flush το βάδισμα, ώστε το banner νίκης να παίξει ΜΕΤΑ το βήμα.
       if (s.phase === "playing" && escapeActive(s) &&
           x === s.quest.start.stairs[0] && y === s.quest.start.stairs[1]) {
-        if (walked.length) {
-          pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked.slice() });
-          walked.length = 0;
-        }
+        flushWalk();
         if (checkEscape(s, hero)) break;
       }
       if (s.phase !== "playing") break;
     }
-    if (walked.length) pushFx(s, { t: "move", key: `hero_${hero.id}`, path: walked });
+    flushWalk();
     return true;
   },
 
@@ -544,6 +638,7 @@ export const commands = {
         pushFx(s, { t: "banner", text: `🌀 ${HEROES[hero.id].name} strides through the rift!`, ms: 1300 });
         pushFx(s, { t: "move", key: `hero_${hero.id}`, path: [[bx, by]] });
         pushLog(s, `🌀 ${HEROES[hero.id].name} reappears in a rush of cold air.`, "spell");
+        pickupLoot(s, hero); // προσγείωση πάνω σε σακίδιο πεσμένου; δικό του
         checkEscape(s, hero); // Riftstride κατευθείαν στα σκαλιά με το κειμήλιο
         break;
       }
@@ -643,10 +738,16 @@ export const commands = {
     // Τυχαία κάρτα
     const r = rng(s);
     const deck = TREASURE_DECK.filter((c) => !s.deckExcluded.includes(c.id));
-    const total = deck.reduce((n, c) => n + c.weight, 0);
-    let pick = r() * total;
-    let card = deck[deck.length - 1];
-    for (const c of deck) { pick -= c.weight; if (pick <= 0) { card = c; break; } }
+    const draw = () => {
+      let pick = r() * deck.reduce((n, c) => n + c.weight, 0);
+      let card = deck[deck.length - 1];
+      for (const c of deck) { pick -= c.weight; if (pick <= 0) { card = c; break; } }
+      return card;
+    };
+    let card = draw();
+    // DM mercy valve (κρυφό): ομάδα στα σχοινιά + κάρτα-κίνδυνος → μία
+    // αθόρυβη επανάληψη της τραβηχτής. Ό,τι έρθει δεύτερο, μένει.
+    if (dmMercyRedraw(s, card)) card = draw();
     if (!card.returns) s.deckExcluded.push(card.id);
 
     pushLog(s, `🃏 ${card.text}`, "treasure");
@@ -699,6 +800,12 @@ export const commands = {
     return true;
   },
 
+  // Αφόπλιση: sapper (trait "disarm") ή ΟΠΟΙΟΣΔΗΠΟΤΕ ήρωας με Sapper's
+  // Satchel (equipment id "toolkit"). Κανόνας με 1 ζάρι μάχης:
+  //   sapper:  μαύρη ασπίδα → η παγίδα ΣΚΑΕΙ πάνω του · οτιδήποτε άλλο → επιτυχία
+  //   satchel: μαύρη → ΣΚΑΕΙ · νεκροκεφαλή → ΑΠΟΤΥΧΙΑ (χαμένη ενέργεια, η
+  //            παγίδα μένει οπλισμένη) · λευκή ασπίδα → επιτυχία
+  // Έτσι ο sapper μένει αυστηρά καλύτερος (5/6 έναντι 2/6 επιτυχία).
   disarm(s, { trapId }) {
     const board = buildBoard(s.quest);
     const hero = activeHero(s);
@@ -706,7 +813,9 @@ export const commands = {
     if (!hero.alive || s.turn.actionUsed || s.turn.over || !trapDef) return false;
     const ts = s.traps[trapId];
     if (!ts.revealed || ts.disarmed || ts.triggered) return false;
-    if (HEROES[hero.id].trait !== "disarm") return false;
+    const isSapper = HEROES[hero.id].trait === "disarm";
+    const hasToolkit = (hero.equipment || []).some((e) => e.id === "toolkit");
+    if (!isSapper && !hasToolkit) return false;
 
     const near = trapDef.cell
       ? (Math.abs(hero.x - trapDef.cell[0]) + Math.abs(hero.y - trapDef.cell[1])) <= 1
@@ -717,11 +826,26 @@ export const commands = {
     const r = rng(s);
     const face = DIE_FACES[Math.floor(r() * 6)];
     if (face === "black") {
-      pushLog(s, `Disarm failed!`, "trap");
+      pushFx(s, {
+        t: "trapdie", text: `🔧 ${HEROES[hero.id].name} works the mechanism...`,
+        face, hit: true, hitText: "💥 It springs!",
+      });
+      pushLog(s, `Disarm failed — the trap springs!`, "trap");
       triggerTrap(s, board, hero, trapDef);
+    } else if (!isSapper && face === "skull") {
+      // Satchel χωρίς την τέχνη του sapper: τα εργαλεία γλιστρούν — άκαρπο
+      pushFx(s, {
+        t: "trapdie", text: `🧰 ${HEROES[hero.id].name} fumbles with the satchel...`,
+        face, hit: true, hitText: "🧰 The picks slip!",
+      });
+      pushLog(s, `🧰 The satchel's picks slip — the trap stays armed. Action wasted.`, "trap");
     } else {
+      pushFx(s, {
+        t: "trapdie", text: `🔧 ${HEROES[hero.id].name} works the mechanism...`,
+        face, hit: false, missText: "🔧 Disarmed!",
+      });
       ts.disarmed = true;
-      pushLog(s, `🔧 Trap disarmed.`, "trap");
+      pushLog(s, `🔧 Trap disarmed${isSapper ? "" : " with the Sapper's Satchel"}.`, "trap");
     }
     return true;
   },
