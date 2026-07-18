@@ -218,6 +218,25 @@ export class BoardView {
     this.flames = [];
     this.time = 0;
     this.dice3d = [];
+    this.GLASS_Y = 2.4; // τα ζάρια προσγειώνονται σε «τζάμι» ψηλότερα από μινιατούρες/τοίχους
+    this.glass = new THREE.Group();
+    const glassDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(2.4, 36),
+      new THREE.MeshBasicMaterial({
+        color: 0xbfe0ff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide,
+      })
+    );
+    glassDisc.rotation.x = -Math.PI / 2;
+    const glassRing = new THREE.Mesh(
+      new THREE.TorusGeometry(2.4, 0.025, 6, 48),
+      new THREE.MeshBasicMaterial({ color: 0xd8ecff, transparent: true, opacity: 0, depthWrite: false })
+    );
+    glassRing.rotation.x = -Math.PI / 2;
+    this.glass.add(glassDisc, glassRing);
+    this.glass.visible = false;
+    this.glassDisc = glassDisc;
+    this.glassRing = glassRing;
+    this.glassTargetOpacity = 0;
     this.dieTextures = {
       skull: skullFaceTexture(),
       white: shieldFaceTexture(false),
@@ -240,8 +259,11 @@ export class BoardView {
     this.lantern = new THREE.PointLight(0xffb45e, 18, 9, 1.6);
     this.lantern.position.set(this.center.x, 2.2, this.center.z);
     this.scene.add(this.lantern);
+    this.scene.add(this.glass);
 
     this.zoom = 1;
+    this.orbit = 0;        // γωνία περιστροφής γύρω από το ταμπλό
+    this.orbitTarget = 0;
     this.panOffset = new THREE.Vector2(0, 0);
     this.panTarget = new THREE.Vector2(0, 0);
 
@@ -264,8 +286,17 @@ export class BoardView {
     const aspect = this.camera.aspect;
     const dist = (aspect < 1 ? 17 : 13) / this.zoom;
     const target = this.center.clone().add(new THREE.Vector3(this.panOffset.x, 0, this.panOffset.y));
-    this.camera.position.set(target.x, dist, target.z + dist * 0.62);
+    const h = dist * 0.62;
+    this.camera.position.set(
+      target.x + Math.sin(this.orbit) * h,
+      dist,
+      target.z + Math.cos(this.orbit) * h
+    );
     this.camera.lookAt(target.x, 0, target.z);
+  }
+
+  rotateBy(rad) {
+    this.orbitTarget += rad;
   }
 
   // Ομαλό ταξίδι κάμερας: θέτουμε μόνο στόχο, το animate() κάνει lerp
@@ -275,7 +306,7 @@ export class BoardView {
 
   #setupGestures(container) {
     let touches = new Map();
-    let lastPinch = 0, moved = false;
+    let lastPinch = 0, lastAngle = null, moved = false;
     let lastTouchEnd = 0; // για να αγνοούμε το synthetic click μετά από tap
 
     container.addEventListener("touchstart", (e) => {
@@ -294,8 +325,11 @@ export class BoardView {
         if (!old) return;
         const dx = t.clientX - old.x, dy = t.clientY - old.y;
         if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
-        this.panOffset.x -= dx * 0.02 / this.zoom;
-        this.panOffset.y -= dy * 0.02 / this.zoom;
+        // pan σε συντεταγμένες κόσμου, λαμβάνοντας υπόψη την περιστροφή
+        const c = Math.cos(this.orbit), s = Math.sin(this.orbit);
+        const k = 0.02 / this.zoom;
+        this.panOffset.x -= (dx * c + dy * s) * k;
+        this.panOffset.y -= (-dx * s + dy * c) * k;
         this.panTarget.copy(this.panOffset);
         touches.set(t.identifier, { x: t.clientX, y: t.clientY });
         this.#updateCamera();
@@ -303,11 +337,21 @@ export class BoardView {
         for (const t of e.changedTouches) touches.set(t.identifier, { x: t.clientX, y: t.clientY });
         const [a, b] = [...touches.values()];
         const pinch = Math.hypot(a.x - b.x, a.y - b.y);
+        const angle = Math.atan2(b.y - a.y, b.x - a.x);
         if (lastPinch) {
           this.zoom = Math.min(2.6, Math.max(0.55, this.zoom * (pinch / lastPinch)));
-          this.#updateCamera();
         }
+        if (lastAngle !== null) {
+          // twist δύο δαχτύλων = περιστροφή κάμερας
+          let d = angle - lastAngle;
+          if (d > Math.PI) d -= Math.PI * 2;
+          if (d < -Math.PI) d += Math.PI * 2;
+          this.orbit -= d;
+          this.orbitTarget = this.orbit;
+        }
+        this.#updateCamera();
         lastPinch = pinch;
+        lastAngle = angle;
         moved = true;
       }
     }, { passive: true });
@@ -322,7 +366,7 @@ export class BoardView {
           if (cell) this.onTap(cell);
         }
       }
-      if (touches.size < 2) lastPinch = 0;
+      if (touches.size < 2) { lastPinch = 0; lastAngle = null; }
     }, { passive: true });
 
     // Desktop: κλικ + ροδέλα. ΠΡΟΣΟΧΗ: στα κινητά ο browser στέλνει
@@ -661,21 +705,27 @@ export class BoardView {
       this.center.x + this.panOffset.x, 0, this.center.z + this.panOffset.y);
   }
 
-  // Ρίχνει τα ζάρια ΕΝΑ-ΕΝΑ. style: "attack" | "defense" | "move" (σειρά στο τραπέζι)
+  // Ρίχνει τα ζάρια ΕΝΑ-ΕΝΑ ΠΑΝΩ ΣΤΟ ΤΖΑΜΙ, με σειρές προσανατολισμένες στην κάμερα
   rollDice3D(specs, style = "move") {
     const focus = this.#diceFocus();
-    const rowZ = style === "attack" ? -0.7 : style === "defense" ? 1.1 : 0.2;
+    const rowZ = style === "attack" ? -0.6 : style === "defense" ? 0.7 : 0.05;
+    const c = Math.cos(this.orbit), s = Math.sin(this.orbit);
+    // εμφάνισε το τζάμι
+    this.glass.position.set(focus.x, this.GLASS_Y - 0.27, focus.z);
+    this.glass.visible = true;
+    this.glassTargetOpacity = 1;
     const STAGGER = 440, FLIGHT = 780;
     specs.forEach((spec, i) => {
       setTimeout(() => {
         const mesh = this.#makeDieMesh(spec);
+        const lane = (i - (specs.length - 1) / 2) * 0.64;
         const to = new THREE.Vector3(
-          focus.x + (i - (specs.length - 1) / 2) * 0.64,
-          0.26,
-          focus.z + rowZ
+          focus.x + lane * c + rowZ * s,
+          this.GLASS_Y,
+          focus.z - lane * s + rowZ * c
         );
         const from = to.clone().add(new THREE.Vector3(
-          (Math.random() - 0.5) * 1.6, 3.2 + Math.random(), 2.2 + Math.random()));
+          (Math.random() - 0.5) * 1.4 + s * 2, 2.6 + Math.random(), c * 2 + (Math.random() - 0.5)));
         mesh.position.copy(from);
         mesh.quaternion.random();
         this.scene.add(mesh);
@@ -694,6 +744,7 @@ export class BoardView {
 
   clearDice3D() {
     for (const d of this.dice3d) d.fading = true;
+    this.glassTargetOpacity = 0;
   }
 
   // Lunge: ο επιτιθέμενος ορμάει προς τον στόχο, ο στόχος τραντάζεται·
@@ -821,10 +872,26 @@ export class BoardView {
     if (this.lanternTarget) this.lantern.position.lerp(this.lanternTarget, Math.min(1, dt * 5));
     this.lantern.intensity = 17 + Math.sin(this.time * 7) * 2.2;
 
-    // Ομαλή κάμερα
+    // Ομαλή κάμερα (pan + orbit)
+    let cameraDirty = false;
     if (this.panOffset.distanceToSquared(this.panTarget) > 0.0004) {
       this.panOffset.lerp(this.panTarget, Math.min(1, dt * 4.5));
-      this.#updateCamera();
+      cameraDirty = true;
+    }
+    if (Math.abs(this.orbit - this.orbitTarget) > 0.002) {
+      this.orbit += (this.orbitTarget - this.orbit) * Math.min(1, dt * 5);
+      cameraDirty = true;
+    }
+    if (cameraDirty) this.#updateCamera();
+
+    // Τζάμι ζαριών: fade in/out
+    if (this.glass.visible) {
+      const target = this.glassTargetOpacity;
+      this.glassDisc.material.opacity += (target * 0.1 - this.glassDisc.material.opacity) * Math.min(1, dt * 8);
+      this.glassRing.material.opacity += (target * 0.4 - this.glassRing.material.opacity) * Math.min(1, dt * 8);
+      if (target === 0 && this.glassRing.material.opacity < 0.02 && this.dice3d.length === 0) {
+        this.glass.visible = false;
+      }
     }
 
     // Fade χρωμάτων στα tiles (fog reveal, highlights, παγίδες)

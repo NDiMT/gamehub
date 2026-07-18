@@ -253,7 +253,7 @@ input {
 #hero-card .hearts { color: var(--blood); letter-spacing: 1px; }
 #hero-card small { font-family: system-ui, sans-serif; font-size: 0.72rem; }
 
-#btn-center {
+#btn-center, #btn-rotate {
   position: absolute;
   right: 10px;
   top: calc(env(safe-area-inset-top, 0px) + 64px);
@@ -263,6 +263,7 @@ input {
   z-index: 6;
   font-size: 1.1rem;
 }
+#btn-rotate { top: calc(env(safe-area-inset-top, 0px) + 114px); }
 
 #game-log {
   position: absolute;
@@ -315,7 +316,10 @@ input {
   border-radius: 6px;
   font-family: system-ui, sans-serif;
 }
-.ab-icon { font-size: 1.25rem; line-height: 1; }
+.ab-icon { font-size: 1.25rem; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.ab-icon img { width: 28px; height: 28px; image-rendering: pixelated; }
+.btn-px { width: 22px; height: 22px; image-rendering: pixelated; vertical-align: -4px; }
+#btn-center .btn-px, #btn-rotate .btn-px { width: 26px; height: 26px; vertical-align: middle; }
 .ab-label { font-size: 0.56rem; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.8; white-space: nowrap; }
 #action-bar button.roll {
   background:

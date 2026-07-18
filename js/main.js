@@ -235,6 +235,7 @@ async function enterGame() {
     const active = state?.heroes[state.turnOrder[state.turnIndex]];
     if (active) view.focusCell(active.x, active.y);
   });
+  document.getElementById("btn-rotate").addEventListener("click", () => view.rotateBy(Math.PI / 4));
 
   const clockStart = performance.now();
   let last = clockStart;

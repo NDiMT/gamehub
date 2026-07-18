@@ -35,12 +35,12 @@
     <p id="loading-note" class="dim">Unpacking the miniatures...</p>
     <div class="home-form">
       <input id="player-name" type="text" maxlength="14" placeholder="Your name" autocomplete="off" />
-      <button id="btn-host" class="primary">🕯 Host a game</button>
+      <button id="btn-host" class="primary"><img class="btn-px" src="assets/icons/px/host.png" alt="" onerror="this.remove()" /> Host a game</button>
       <div class="join-row">
         <input id="join-code" type="text" maxlength="4" placeholder="CODE" autocomplete="off" />
         <button id="btn-join">Join</button>
       </div>
-      <button id="btn-solo" class="ghost">🗡 Solo delve</button>
+      <button id="btn-solo" class="ghost"><img class="btn-px" src="assets/icons/px/solo.png" alt="" onerror="this.remove()" /> Solo delve</button>
       <p id="home-error" class="error"></p>
     </div>
     <p class="fine-print">1–4 heroes, each on their own phone · The dungeon plays itself</p>
@@ -62,7 +62,8 @@
     <div id="turn-bar"></div>
     <div id="objective-chip"></div>
     <div id="hero-card"></div>
-    <button id="btn-center" title="Center on active hero">🎯</button>
+    <button id="btn-center" title="Center on active hero"><img class="btn-px" src="assets/icons/px/center.png" alt="" data-fb="🎯" onerror="this.replaceWith(this.dataset.fb)" /></button>
+    <button id="btn-rotate" title="Rotate camera"><img class="btn-px" src="assets/icons/px/rotate.png" alt="" data-fb="↻" onerror="this.replaceWith(this.dataset.fb)" /></button>
     <div id="game-log"></div>
     <div id="dice-tray" class="hidden"></div>
     <div id="turn-banner" class="hidden"></div>
