@@ -1,5 +1,5 @@
 // Cache-first service worker. Ανέβασε το CACHE_VERSION σε κάθε deploy.
-const CACHE_VERSION = "cryptbound-v8";
+const CACHE_VERSION = "cryptbound-v9";
 
 const CORE_ASSETS = [
   ".", "index.html", "css/style.css",
@@ -18,8 +18,20 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+      .then((keys) => {
+        const hadOld = keys.some((k) => k !== CACHE_VERSION);
+        return Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
+          .then(() => self.clients.claim())
+          .then(() => {
+            // Νέα έκδοση: ξαναφόρτωσε ανοιχτά tabs ώστε να πάρουν φρέσκο κώδικα
+            // με ΕΝΑ άνοιγμα — τέλος το «διπλό refresh».
+            if (hadOld) {
+              return self.clients.matchAll({ type: "window" }).then((clients) =>
+                clients.forEach((c) => c.navigate(c.url))
+              );
+            }
+          });
+      })
   );
 });
 

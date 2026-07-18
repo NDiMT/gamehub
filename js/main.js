@@ -1,7 +1,7 @@
 import { createGame, commands, advanceTurn } from "./state.js";
 import { runMonsterPhase } from "./ai.js";
 import { buildBoard, reachableCells, pathTo, key, isAdjacent, lineOfSight, areaAt } from "./board.js";
-import { HEROES } from "./config.js";
+import { HEROES, BUILD } from "./config.js";
 import { loadMinis } from "./assets.js";
 import { BoardView } from "./render3d.js";
 import { createUI } from "./ui.js";
@@ -360,6 +360,9 @@ function onCellTap({ x, y }) {
   // Κίνηση με επιβεβαίωση: 1ο tap = προεπισκόπηση, 2ο tap στο ίδιο κελί = εκτέλεση
   if (!state.turn.moveRoll || state.turn.over) return;
   if (uiMode.pendingMove && uiMode.pendingMove.x === x && uiMode.pendingMove.y === y) {
+    // Δικλείδα: το 2ο tap μετράει μόνο αν πέρασαν 350ms από το preview —
+    // κόβει ΚΑΘΕ διπλό event (ghost click, double-fire) ό,τι κι αν το στέλνει.
+    if (Date.now() - uiMode.pendingMove.at < 350) return;
     issue("move", { path: uiMode.pendingMove.path });
     return;
   }
@@ -368,7 +371,7 @@ function onCellTap({ x, y }) {
   const { stops, prev } = reachableCells(board, state, hero, left);
   if (!stops.has(key(x, y))) { uiMode.pendingMove = null; refreshActions(state); highlightForMode(state); return; }
   const path = pathTo(prev, hero.x, hero.y, x, y);
-  uiMode.pendingMove = { x, y, path };
+  uiMode.pendingMove = { x, y, path, at: Date.now() };
   refreshActions(state);
   highlightForMode(state);
 }
@@ -412,6 +415,7 @@ function monsterAttack(s, monster, hero, dice) {
   quest = await fetch("data/quest01.json").then((r) => r.json());
   models = await loadMinis();
   document.getElementById("loading-note").classList.add("hidden");
+  document.getElementById("build-badge").textContent = "build " + BUILD;
   ui.show(ui.el.home);
 })();
 

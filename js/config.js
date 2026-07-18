@@ -1,3 +1,5 @@
+export const BUILD = "v9";
+
 // CRYPTBOUND — all gameplay numbers and text in one place.
 export const HEROES = {
   warrior: {

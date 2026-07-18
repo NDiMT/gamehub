@@ -502,6 +502,10 @@ export class BoardView {
           .some((m) => m.alive && m.area === area);
         const searched = activeHero.searchedTreasure?.includes(area);
         mesh.userData.glowing = mesh.visible && heroHere && !monstersHere && !searched;
+        // Αν ΟΠΟΙΟΣΔΗΠΟΤΕ ήρωας το έχει ανοίξει: γέρνει ανοιχτό, ορατά αδειασμένο
+        const openedByAnyone = Object.values(state.heroes)
+          .some((h) => h.searchedTreasure?.includes(area));
+        mesh.userData.opened = openedByAnyone;
       } else mesh.userData.glowing = false;
     }
 
@@ -672,10 +676,15 @@ export class BoardView {
       }
     }
 
-    // Παλμός στα ανοίξιμα σεντούκια
+    // Παλμός στα ανοίξιμα σεντούκια + ορατό «άνοιγμα» στα ψαγμένα
     for (const mesh of this.pieces.values()) {
       if (!mesh.userData.isFurniture) continue;
-      if (mesh.userData.glowing) {
+      if (mesh.userData.opened) {
+        // γέρνει προς τα πίσω σαν ανοιγμένο καπάκι
+        mesh.rotation.x += ((-0.5) - mesh.rotation.x) * Math.min(1, dt * 6);
+        mesh.scale.setScalar(1);
+        mesh.position.y = 0;
+      } else if (mesh.userData.glowing) {
         const pulse = 1 + Math.sin(this.time * 5) * 0.07;
         mesh.scale.setScalar(pulse);
         mesh.position.y = Math.abs(Math.sin(this.time * 5)) * 0.06;
