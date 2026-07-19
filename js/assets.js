@@ -37,7 +37,7 @@ export async function loadMinis() {
           loader.loadAsync(entry.file),
           new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
         ]);
-        models[entry.name] = normalize(gltf.scene, TARGET_HEIGHT[entry.name] || 1, MAX_FOOTPRINT[entry.name]);
+        models[entry.name] = normalize(gltf.scene, TARGET_HEIGHT[entry.name] || 1, MAX_FOOTPRINT[entry.name], entry.name);
       } catch (err) {
         console.warn(`Μοντέλο ${entry.name}: ${err.message} — fallback πιόνι.`);
       }
@@ -46,7 +46,11 @@ export async function loadMinis() {
   return models;
 }
 
-function normalize(scene, targetHeight, maxFootprint) {
+// Ανά-μοντέλο διόρθωση φωτεινότητας: ο mystic είναι βαμμένος τόσο σκούρος
+// που κάτω από το φανάρι γίνεται μαύρη σιλουέτα — τον ανοίγουμε λίγο.
+const BRIGHTEN = { hero_mystic: { mul: 1.5, emissive: 0x1a2a1a } };
+
+function normalize(scene, targetHeight, maxFootprint, name) {
   const box = new THREE.Box3().setFromObject(scene);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
@@ -58,8 +62,16 @@ function normalize(scene, targetHeight, maxFootprint) {
   }
   scene.scale.setScalar(scale);
   scene.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+  const fix = BRIGHTEN[name];
   wrapper.traverse((o) => {
-    if (o.isMesh && o.material) { o.material.roughness = 0.85; o.material.metalness = 0; }
+    if (o.isMesh && o.material) {
+      o.material.roughness = 0.85;
+      o.material.metalness = 0;
+      if (fix) {
+        if (o.material.color) o.material.color.multiplyScalar(fix.mul);
+        if (fix.emissive && o.material.emissive) o.material.emissive.setHex(fix.emissive);
+      }
+    }
   });
   return wrapper;
 }
@@ -68,15 +80,17 @@ function normalize(scene, targetHeight, maxFootprint) {
 export function fallbackMini(color, height = 1, isBoss = false) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(isBoss ? 0.42 : 0.32, isBoss ? 0.46 : 0.36, 0.08, 20),
+    new THREE.CylinderGeometry(isBoss ? 0.5 : 0.32, isBoss ? 0.56 : 0.36, 0.08, 20),
     new THREE.MeshLambertMaterial({ color: 0x222230 })
   );
   base.position.y = 0.04;
+  // Boss: ψηλότερη, πιο σκούρα φιγούρα σε φαρδιά βάση — όχι «μπεζ αυγό»
+  const bodyColor = isBoss ? new THREE.Color(color).multiplyScalar(0.55) : color;
   const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(isBoss ? 0.3 : 0.2, height * 0.55, 4, 10),
-    new THREE.MeshLambertMaterial({ color })
+    new THREE.CapsuleGeometry(isBoss ? 0.3 : 0.2, height * (isBoss ? 0.75 : 0.55), 4, 10),
+    new THREE.MeshLambertMaterial({ color: bodyColor })
   );
-  body.position.y = height * 0.45 + 0.1;
+  body.position.y = height * (isBoss ? 0.55 : 0.45) + 0.1;
   g.add(base, body);
   return g;
 }

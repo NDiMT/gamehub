@@ -94,7 +94,8 @@ export function dmRoomReveal(s, areaId) {
   s.dm.seen["room:" + areaId] = true;
   const areaDef = (s.quest.areas || []).find((a) => a.id === areaId);
   pushLog(s, `🕯 ${lore}`);
-  if (areaDef?.type === "room") pushFx(s, { t: "card", kind: "special", text: `🕯 ${lore}` });
+  // kind "lore": δική του κάρτα (κερί/πέτρα) — το "special" μένει για θησαυρούς quest
+  if (areaDef?.type === "room") pushFx(s, { t: "card", kind: "lore", text: `🕯 ${lore}` });
   else pushFx(s, { t: "banner", text: `🕯 ${lore}`, ms: 2400 });
 
   // Ο boss φανερώθηκε; (μία φορά ανά quest)

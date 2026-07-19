@@ -5,6 +5,10 @@ import { gearBonus } from "./state.js";
 
 const $ = (id) => document.getElementById(id);
 
+// Χρόνος προβολής κάρτας ανάλογα με το κείμενο — κοινός τύπος για το
+// hide timer του showCard ΚΑΙ το fx sleep στο main.js (πρέπει να συμβαδίζουν).
+export const cardDisplayMs = (text) => Math.max(2600, 1400 + (text || "").length * 30);
+
 export function createUI() {
   const el = {
     home: $("screen-home"), lobby: $("screen-lobby"), game: $("screen-game"),
@@ -53,7 +57,7 @@ export function createUI() {
           <span class="hero-dot" style="background:#${def.color.toString(16).padStart(6, "0")}"></span>
         </span>
         <span class="hero-name">${def.name} <small>${def.title}</small>
-          <span class="hero-stats">⚔${def.attack} 🛡${def.defense} ❤${def.body} 🧠${def.mind} — ${def.blurb}</span>
+          <span class="hero-stats">⚔️${def.attack} 🛡️${def.defense} ❤️${def.body} 🧠${def.mind} — ${def.blurb}</span>
         </span>
         <span class="hero-by">${taken ? (taken.seat === mySeat ? "YOU" : taken.name) : "open"}</span>`;
       div.dataset.heroId = heroId;
@@ -115,7 +119,7 @@ export function createUI() {
       `${mine.artifacts?.some((a) => a.relic) ? " · 🏺relic" : ""}`;
     el.heroCard.innerHTML = `
       <b>${def.name}</b> <span class="hearts">${"❤".repeat(mine.body)}<span class="dim">${"♡".repeat(Math.max(0, mine.maxBody - mine.body))}</span></span><br>
-      <small>⚔${attack} 🛡${shield} · 💰${mine.gold}${gear ? " · " + gear : ""}${potions ? " · " + potions : ""}${status}${mine.alive ? "" : " · ☠ DOWN"}</small>`;
+      <small>⚔️${attack} 🛡️${shield} · 💰${mine.gold}${gear ? " · " + gear : ""}${potions ? " · " + potions : ""}${status}${mine.alive ? "" : " · ☠️ DOWN"}</small>`;
   }
 
   // ---------- Action bar: μόνο εικονίδια, χωρίς scroll ----------
@@ -193,7 +197,7 @@ export function createUI() {
 
   // ---------- Treasure card ----------
   function showCard(cardInfo) {
-    const icons = { gold: "💰", potion: "🧪", hazard: "☠", monster: "👁", special: "🏆" };
+    const icons = { gold: "💰", potion: "🧪", hazard: "☠", monster: "👁", special: "🏆", lore: "🕯" };
     el.card.innerHTML = `
       <div class="tcard ${cardInfo.kind}">
         <div class="tcard-inner">
@@ -208,7 +212,7 @@ export function createUI() {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => el.card.querySelector(".tcard").classList.add("flip")));
     clearTimeout(el.card._timer);
-    el.card._timer = setTimeout(() => el.card.classList.add("hidden"), 2600);
+    el.card._timer = setTimeout(() => el.card.classList.add("hidden"), cardDisplayMs(cardInfo.text));
     el.card.onclick = () => el.card.classList.add("hidden");
   }
 
@@ -264,8 +268,10 @@ export function createUI() {
     el.endStats.innerHTML = Object.values(state.heroes).map((h) => {
       const def = HEROES[h.id];
       const gear = (h.equipment || []).map((e) => e.icon || "").join("");
-      return `<div class="end-hero">${h.alive ? "🏅" : "☠"} <b>${def.name}</b>
-        <span class="dim">${h.playerName}</span> — 💰${h.gold}${gear ? " " + gear : ""}</div>`;
+      return `<div class="end-hero ${h.alive ? "" : "dead"}">
+        <img class="end-portrait" src="assets/art/portrait_${h.id}.webp" alt="" onerror="this.remove()" />
+        <span>${h.alive ? "🏅" : "☠"} <b>${def.name}</b>
+        <span class="dim">${h.playerName}</span> — 💰${h.gold}${gear ? " " + gear : ""}</span></div>`;
     }).join("") + (opts.extraStats || "");
     el.btnAgain.textContent = opts.buttonLabel || "↺ Play again";
     el.btnAgain.classList.toggle("hidden", !!opts.hideButton);
@@ -302,8 +308,10 @@ export function createUI() {
       el.armoryItems.innerHTML = ctx.items.map((it) => {
         const owned = !it.consumable && hero.owned.includes(it.id);
         const canBuy = !owned && hero.gold >= it.cost;
+        // Pixel-art εικονίδιο αντικειμένου με emoji fallback (ίδιο pattern με action bar)
         return `<div class="armory-item ${owned ? "owned" : ""}">
-          <span class="sheet-icon">${it.icon}</span>
+          <span class="sheet-icon"><img class="ai-icon" src="assets/icons/px/item_${it.id}.png" alt=""
+            data-fb="${it.icon}" onerror="this.replaceWith(this.dataset.fb)" /></span>
           <span><b>${it.name}</b><small>${it.desc}</small></span>
           <button class="ai-buy" data-item="${it.id}" ${owned || !canBuy ? "disabled" : ""}>
             ${owned ? "OWNED" : `💰${it.cost}`}</button>

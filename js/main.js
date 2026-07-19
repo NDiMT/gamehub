@@ -4,7 +4,7 @@ import { buildBoard, reachableCells, pathTo, key, isAdjacent, lineOfSight, areaA
 import { HEROES, SPELLS, BUILD, ARMORY, RULES } from "./config.js";
 import { loadMinis } from "./assets.js";
 import { BoardView } from "./render3d.js";
-import { createUI } from "./ui.js";
+import { createUI, cardDisplayMs } from "./ui.js";
 import { pickTransport, loopbackTransport, makeRoomCode } from "./net.js";
 
 /* CRYPTBOUND: The Shadowkeep — bootstrap, δικτύωση, ροή παιχνιδιού.
@@ -585,7 +585,8 @@ async function playFxEvent(ev) {
     await sleep(Math.min(ev.ms || 1500, 1300));
   } else if (ev.t === "card") {
     ui.showCard(ev);
-    await sleep(2400);
+    // Ίδιος τύπος με το hide timer του showCard — μεγάλα κείμενα, περισσότερος χρόνος
+    await sleep(cardDisplayMs(ev.text) - 200);
   }
 }
 

@@ -20,18 +20,20 @@ const ROOM_TINTS = {
   barracks: { light: 0xc8bb9e, dark: 0xb7aa8d }, // παλιό δέρμα
   store:    { light: 0xbfb59a, dark: 0xaea489 }, // ώχρα αποθήκης
   // quest02 — The Sunken Reliquary (πλημμυρισμένες στέρνες)
+  // Οι «αδύναμες» αποχρώσεις έχουν ~2x απόσταση από το γκρι — κάτω από το
+  // πορτοκαλί φανάρι οι ήπιες ξεπλένονταν σε ενιαία λάσπη
   wellhead:    { light: 0xcdbfa8, dark: 0xbcae97 }, // ζεστό αμμόχρωμα εισόδου
-  cistern:     { light: 0x9fb4be, dark: 0x8ea3ad }, // βαθύ υγρό γαλάζιο
-  reliquary:   { light: 0xc8c2d4, dark: 0xb7b1c3 }, // χλωμό ιερό μωβ
-  drownedhall: { light: 0xa8bcb4, dark: 0x97aba3 }, // σταχτί νερό
+  cistern:     { light: 0x8eb8cc, dark: 0x7da7bb }, // βαθύ υγρό γαλάζιο
+  reliquary:   { light: 0xc6bade, dark: 0xb5a9cd }, // χλωμό ιερό μωβ
+  drownedhall: { light: 0x9dc5b5, dark: 0x8cb4a4 }, // σταχτί νερό
   sluice:      { light: 0xa9bd9e, dark: 0x98ac8d }, // γλίτσα/βρύο
   mosspool:    { light: 0x9cbfa6, dark: 0x8bae95 }, // πράσινη λιμνούλα
   // quest03 — The Undercrown (αίθουσες από κόκαλο και σκουριά)
   descent:   { light: 0xcdbfa8, dark: 0xbcae97 },   // ζεστό αμμόχρωμα εισόδου
-  throne:    { light: 0xb3a17c, dark: 0xa2906b },   // θαμπό χρυσάφι θρόνου
+  throne:    { light: 0xcba75d, dark: 0xba964c },   // θαμπό χρυσάφι θρόνου
   warrens_w: { light: 0xc2bcae, dark: 0xb1ab9d },   // ξασπρισμένο κόκαλο
   warrens_e: { light: 0xc2bcae, dark: 0xb1ab9d },
-  forge:     { light: 0xc2a08e, dark: 0xb18f7d },   // σκουριά σφυρηλατείου
+  forge:     { light: 0xdf9b77, dark: 0xce8a66 },   // σκουριά σφυρηλατείου
   gallery:   { light: 0xbaa8c2, dark: 0xa997b1 },   // μωβ σκόνη βιβλιοθήκης
   boneyard:  { light: 0xafb8a6, dark: 0x9ea795 },   // χλωμό οστεοφυλάκιο
   vault3:    { light: 0xcfc194, dark: 0xbeb083 },   // κρυφός χρυσός θάλαμος
@@ -310,6 +312,10 @@ export class BoardView {
   #updateCamera() {
     const aspect = this.camera.aspect;
     const dist = (aspect < 1 ? 17 : 13) / this.zoom;
+    // Η ομίχλη ακολουθεί την απόσταση κάμερας — στο zoom-out το βάθος του
+    // ταμπλό δεν μαυρίζει πια (σταθερό near/far έπνιγε το μισό board)
+    this.scene.fog.near = dist + 10;
+    this.scene.fog.far = dist + 34;
     const target = this.center.clone().add(new THREE.Vector3(this.panOffset.x, 0, this.panOffset.y));
     const h = dist * 0.62;
     this.camera.position.set(
@@ -541,6 +547,8 @@ export class BoardView {
       .find(([dx, dy]) => areaAt(this.board, x + dx, y + dy));
     if (!dir) return;
     const [dx, dy] = dir;
+    // Σε ποια περιοχή «βλέπει» ο πυρσός — για να σβήνει όσο μένει κρυφή
+    const facingArea = areaAt(this.board, x + dx, y + dy);
     const fx = x + 0.5 + dx * 0.55, fz = y + 0.5 + dy * 0.55;
 
     // κεκλιμένο στέλεχος που «φυτρώνει» από τον τοίχο
@@ -583,7 +591,7 @@ export class BoardView {
     glow.position.set(tipX, 1.32, tipZ);
 
     this.scene.add(stick, ring, core, flame, glow);
-    this.flames.push({ flame, glow, core, phase: (x + y * 3) % 10 });
+    this.flames.push({ flame, glow, core, stick, ring, areaId: facingArea, phase: (x + y * 3) % 10 });
   }
 
   #nearFloor(x, y) {
@@ -607,6 +615,14 @@ export class BoardView {
 
   // Συγχρονισμός σκηνής με state (καλείται σε κάθε state update)
   sync(state) {
+    // Πυρσοί: φλόγες μόνο σε αποκαλυμμένες περιοχές — αλλιώς «καρφώνουν»
+    // τη διάταξη του χάρτη πάνω στο μαύρο fog of war
+    for (const f of this.flames) {
+      const vis = !!state.revealed[f.areaId];
+      f.flame.visible = f.glow.visible = f.core.visible = vis;
+      f.stick.visible = f.ring.visible = vis;
+    }
+
     // Fog: κελιά κρυφών περιοχών σκοτεινά
     for (const [k, tile] of this.tileMeshes) {
       const [x, y] = k.split(",").map(Number);
@@ -655,6 +671,28 @@ export class BoardView {
         // σκαλιά που χοροπηδάνε θα έδειχναν σπασμένα.
         mesh.userData.glowing = mesh.visible && escaping;
         mesh.userData.glowPulseOnly = true;
+        // Φάση διαφυγής: χρυσό additive δαχτυλίδι + παλλόμενο φως — η
+        // έξοδος πρέπει να ΔΙΑΒΑΖΕΤΑΙ ως έξοδος, ο παλμός κλίμακας δεν έφτανε
+        if (escaping && mesh.visible && !this.stairsFx) {
+          const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(0.64, 0.06, 6, 28),
+            new THREE.MeshBasicMaterial({
+              color: 0xffd24a, transparent: true, opacity: 0.85,
+              blending: THREE.AdditiveBlending, depthWrite: false,
+            })
+          );
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(mesh.position.x, 0.08, mesh.position.z);
+          const light = new THREE.PointLight(0xffc84a, 6, 5, 1.8);
+          light.position.set(mesh.position.x, 1.1, mesh.position.z);
+          this.stairsFx = { ring, light };
+          this.scene.add(ring, light);
+        }
+        if (this.stairsFx) {
+          const on = escaping && mesh.visible;
+          this.stairsFx.ring.visible = on;
+          this.stairsFx.light.visible = on;
+        }
       } else if (mesh.userData.kind === "chest" && activeHero?.alive) {
         const area = mesh.userData.areaId;
         const heroHere = areaAt(this.board, activeHero.x, activeHero.y) === area;
@@ -739,7 +777,7 @@ export class BoardView {
       g.add(sack);
     }
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.32, 0.03, 6, 20),
+      new THREE.TorusGeometry(0.45, 0.04, 6, 24),
       new THREE.MeshBasicMaterial({
         color: 0xffd24a, transparent: true, opacity: 0.7,
         blending: THREE.AdditiveBlending, depthWrite: false,
@@ -794,10 +832,13 @@ export class BoardView {
   #diceFocus() {
     // Μετατόπιση προς την κάμερα: τα ζάρια προσγειώνονται στο κάτω μέρος
     // της οθόνης, ΟΧΙ πάνω από τις μινιατούρες που μονομαχούν.
+    // Το GLASS_Y τα προβάλλει ψηλότερα στην οθόνη — αντισταθμίζουμε με
+    // επιπλέον offset ~GLASS_Y * 0.62 (η κλίση της κάμερας).
+    const off = 1.6 + this.GLASS_Y * 0.62;
     const c = Math.cos(this.orbit), s = Math.sin(this.orbit);
     return new THREE.Vector3(
-      this.center.x + this.panOffset.x + s * 1.6, 0,
-      this.center.z + this.panOffset.y + c * 1.6);
+      this.center.x + this.panOffset.x + s * off, 0,
+      this.center.z + this.panOffset.y + c * off);
   }
 
   // Ρίχνει τα ζάρια ΕΝΑ-ΕΝΑ ΠΑΝΩ ΣΤΟ ΤΖΑΜΙ, με σειρές προσανατολισμένες στην κάμερα
@@ -975,7 +1016,7 @@ export class BoardView {
         if (!mesh.visible) continue;
         const pulse = 1 + Math.sin(this.time * 5) * 0.1;
         mesh.scale.setScalar(pulse);
-        mesh.position.y = Math.abs(Math.sin(this.time * 5)) * 0.05;
+        mesh.position.y = Math.abs(Math.sin(this.time * 5)) * 0.08;
       }
     }
 
@@ -1023,22 +1064,66 @@ export class BoardView {
       }
     }
 
+    // Σκαλιά-έξοδος στη φάση διαφυγής: αργός παλμός δαχτυλιδιού + φωτός
+    if (this.stairsFx?.ring.visible) {
+      const fx = this.stairsFx;
+      fx.ring.rotation.z += dt * 1.2;
+      const p = 1 + Math.sin(this.time * 4) * 0.12;
+      fx.ring.scale.set(p, p, 1);
+      fx.ring.material.opacity = 0.55 + Math.abs(Math.sin(this.time * 4)) * 0.4;
+      fx.light.intensity = 4 + Math.sin(this.time * 4) * 3;
+    }
+
     // Παλμός στα ανοίξιμα σεντούκια + ορατό «άνοιγμα» στα ψαγμένα
     for (const mesh of this.pieces.values()) {
       if (!mesh.userData.isFurniture) continue;
       if (mesh.userData.opened) {
-        // γέρνει προς τα πίσω σαν ανοιγμένο καπάκι
+        // γέρνει προς τα πίσω σαν ανοιγμένο καπάκι, βουλιάζει και θαμπώνει —
+        // «αδειασμένο» με μια ματιά
         mesh.rotation.x += ((-0.5) - mesh.rotation.x) * Math.min(1, dt * 6);
         mesh.scale.setScalar(1);
-        mesh.position.y = 0;
+        mesh.position.y += ((-0.05) - mesh.position.y) * Math.min(1, dt * 6);
+        if (!mesh.userData.dimmed) {
+          mesh.userData.dimmed = true;
+          // clone υλικών: το glTF clone μοιράζεται materials με τα άλλα σεντούκια
+          mesh.traverse((o) => {
+            if (o.isMesh && o.material) {
+              o.material = o.material.clone();
+              o.material.color.multiplyScalar(0.5).lerp(new THREE.Color(0x555049), 0.3);
+            }
+          });
+        }
+        if (mesh.userData.glowRing) mesh.userData.glowRing.visible = false;
       } else if (mesh.userData.glowing) {
         const pulse = 1 + Math.sin(this.time * 5) * 0.07;
         mesh.scale.setScalar(pulse);
         // glowPulseOnly (σκαλιά): μόνο παλμός, χωρίς αναπήδηση
         mesh.position.y = mesh.userData.glowPulseOnly ? 0 : Math.abs(Math.sin(this.time * 5)) * 0.06;
-      } else if (mesh.scale.x !== 1) {
-        mesh.scale.setScalar(1);
-        mesh.position.y = 0;
+        // «Λάμπει» = χρυσό δαχτυλίδι στη βάση (ίδιο pattern με loot marker) —
+        // ο σκέτος παλμός κλίμακας δεν διαβαζόταν ως προτροπή
+        if (!mesh.userData.glowPulseOnly) {
+          if (!mesh.userData.glowRing) {
+            const ring = new THREE.Mesh(
+              new THREE.TorusGeometry(0.45, 0.035, 6, 24),
+              new THREE.MeshBasicMaterial({
+                color: 0xffd24a, transparent: true, opacity: 0.7,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+              })
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.05;
+            mesh.add(ring);
+            mesh.userData.glowRing = ring;
+          }
+          mesh.userData.glowRing.visible = true;
+          mesh.userData.glowRing.material.opacity = 0.45 + Math.abs(Math.sin(this.time * 5)) * 0.4;
+        }
+      } else {
+        if (mesh.scale.x !== 1) {
+          mesh.scale.setScalar(1);
+          if (!mesh.userData.opened) mesh.position.y = 0;
+        }
+        if (mesh.userData.glowRing) mesh.userData.glowRing.visible = false;
       }
     }
     this.renderer.render(this.scene, this.camera);
