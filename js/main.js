@@ -1,7 +1,7 @@
 import { createGame, commands, advanceTurn, blinkCells, thrownWeaponFor } from "./state.js";
 import { runMonsterPhase } from "./ai.js";
 import { buildBoard, reachableCells, pathTo, key, isAdjacent, lineOfSight, areaAt } from "./board.js";
-import { HEROES, SPELLS, BUILD, ARMORY } from "./config.js";
+import { HEROES, SPELLS, BUILD, ARMORY, RULES } from "./config.js";
 import { loadMinis } from "./assets.js";
 import { BoardView } from "./render3d.js";
 import { createUI } from "./ui.js";
@@ -14,6 +14,7 @@ const ui = createUI();
 let net = null;          // transport session
 let isHost = false;
 let mySeat = null;
+let myClientId = null;   // ταυτότητα guest — μπαίνει σε κάθε εντολή (BC identity)
 let lobby = { code: null, players: [] }; // {seat, name, heroId}
 let quest = null;
 let models = {};
@@ -97,23 +98,39 @@ async function startHost(transport, solo = false) {
     lobby = { code: solo ? null : code, players: [{ seat: 0, name: myName(), heroId: null }] };
     net = room;
 
-    room.onGuestJoin((msg) => {
-      if (state) return; // ξεκίνησε ήδη
-      if (lobby.players.length >= 4) return;
-      if (lobby.players.some((p) => p.clientId === msg.clientId)) return; // διπλό hello
+    room.onGuestJoin((msg, senderId) => {
+      const existing = lobby.players.find((p) => p.clientId === msg.clientId);
+      if (state) {
+        // Rejoin μετά από reload: γνωστός clientId → ξαναστείλε lobby + state
+        if (existing) {
+          existing.senderId = senderId;
+          broadcastLobby();
+          broadcastState();
+        }
+        return;
+      }
+      if (existing) { existing.senderId = senderId; return; } // διπλό hello
+      if (lobby.players.length >= 4) {
+        net.broadcast({ type: "lobbyFull", clientId: msg.clientId });
+        return;
+      }
       const seat = lobby.players.length;
       lobby.players.push({
-        seat, name: msg.name || `Player ${seat + 1}`, heroId: null, clientId: msg.clientId,
+        seat, name: msg.name || `Player ${seat + 1}`, heroId: null,
+        clientId: msg.clientId, senderId,
       });
       broadcastLobby();
     });
-    room.onCommand((msg) => {
+    room.onCommand((msg, senderId) => {
+      // Anti-cheat: η θέση (seat) πρέπει να ανήκει στον ΑΠΟΣΤΟΛΕΑ της εντολής —
+      // κανείς guest δεν παίζει για λογαριασμό άλλου παίκτη.
+      const owner = lobby.players.find((pl) => pl.seat === msg.seat);
+      if (!owner || !owner.senderId || owner.senderId !== senderId) return;
       if (msg.lobby) {
         // guest διάλεξε ήρωα στο lobby
-        const p = lobby.players.find((pl) => pl.seat === msg.seat);
-        if (p && !state) {
+        if (owner && !state) {
           const taken = lobby.players.some((pl) => pl.heroId === msg.heroId && pl.seat !== msg.seat);
-          if (!taken) { p.heroId = msg.heroId; broadcastLobby(); }
+          if (!taken) { owner.heroId = msg.heroId; broadcastLobby(); }
         }
         return;
       }
@@ -135,20 +152,35 @@ async function startJoin() {
     const conn = await pickTransport().joinRoom(code);
     net = conn;
     isHost = false;
-    const clientId = Math.random().toString(36).slice(2, 10);
+    // Σταθερό clientId ανά tab: επιβιώνει reload → επιτρέπει rejoin στο παιχνίδι
+    const clientId = sessionStorage.getItem("cb.cid") ||
+      (() => { const id = Math.random().toString(36).slice(2, 10); sessionStorage.setItem("cb.cid", id); return id; })();
+    myClientId = clientId;
+    let gotReply = false;
     conn.onState((msg) => {
+      gotReply = true;
       if (msg.type === "lobby") {
         lobby = msg.lobby;
         const me = lobby.players.find((p) => p.clientId === clientId);
         if (me) mySeat = me.seat;
-        ui.show(ui.el.lobby);
-        ui.renderLobby(lobby, mySeat, false);
+        // Αν το παιχνίδι τρέχει ήδη (rejoin), το state screen αναλαμβάνει
+        if (!state) {
+          ui.show(ui.el.lobby);
+          ui.renderLobby(lobby, mySeat, false);
+        }
       } else if (msg.type === "state") {
         onStateReceived(msg.state, msg);
+      } else if (msg.type === "lobbyFull" && msg.clientId === clientId) {
+        ui.el.homeError.textContent = "That room is full (4 heroes max).";
+        ui.show(ui.el.home);
       }
     });
     conn.onClosed(() => ui.toast("Connection to the host was lost."));
     conn.send({ type: "hello", name: myName(), clientId });
+    // BC δεν έχει έλεγχο ύπαρξης δωματίου — αν δεν απαντήσει κανείς, πες το
+    setTimeout(() => {
+      if (!gotReply) ui.el.homeError.textContent = "No response from that room — check the code.";
+    }, 5000);
   } catch (err) {
     ui.el.homeError.textContent = "Room not found: " + err.message;
   }
@@ -170,7 +202,7 @@ ui.el.lobbySlots.addEventListener("click", (e) => {
     lobby.players.find((p) => p.seat === mySeat).heroId = heroId;
     broadcastLobby();
   } else {
-    net.send({ type: "command", lobby: true, seat: mySeat, heroId });
+    net.send({ type: "command", lobby: true, seat: mySeat, heroId, clientId: myClientId });
   }
 });
 
@@ -445,22 +477,35 @@ function rebuildForNewQuest() {
 const fxQueue = [];
 let fxPlaying = false;
 let fxFast = false;
+// Sticky fast mode: μένει αναμμένο μέχρι να το ξανακλείσεις (θυμάται και
+// ανάμεσα σε sessions) — αλλιώς στο quest03 πατάς Skip κάθε γύρο επί 45''.
+let fxFastSticky = localStorage.getItem("cb.fastfx") === "1";
 const sleep = (ms) => new Promise((r) => setTimeout(r, fxFast ? Math.min(ms, 70) : ms));
 const btnSkip = document.getElementById("btn-skip");
+
+function refreshSkipButton() {
+  if (!btnSkip) return;
+  btnSkip.textContent = fxFastSticky ? "🐢 Normal speed" : "⏩ Skip";
+}
+refreshSkipButton();
 btnSkip?.addEventListener("click", () => {
-  fxFast = true;
-  btnSkip.classList.add("hidden");
+  fxFastSticky = !fxFastSticky;
+  fxFast = fxFastSticky;
+  localStorage.setItem("cb.fastfx", fxFastSticky ? "1" : "0");
+  refreshSkipButton();
+  ui.toast(fxFastSticky ? "Fast-forward stays ON — tap 🐢 to slow down." : "Back to full drama.");
 });
 
 function enqueueFx(events) {
   fxQueue.push(...events);
   if (!fxPlaying) playFxQueue();
-  else if (fxQueue.length >= 2 && !fxFast) btnSkip?.classList.remove("hidden");
+  else if (fxQueue.length >= 2) btnSkip?.classList.remove("hidden");
 }
 
 async function playFxQueue() {
   fxPlaying = true;
-  if (fxQueue.length >= 2) btnSkip?.classList.remove("hidden");
+  fxFast = fxFastSticky;
+  if (fxQueue.length >= 2 || fxFastSticky) btnSkip?.classList.remove("hidden");
   while (fxQueue.length) {
     const ev = fxQueue.shift();
     try { await playFxEvent(ev); } catch (err) { console.warn("fx error", err); }
@@ -581,7 +626,7 @@ async function enterGame() {
 function issue(cmd, args) {
   uiMode.pendingMove = null;
   if (isHost) hostApply(mySeat, cmd, args);
-  else net.send({ type: "command", seat: mySeat, cmd, args });
+  else net.send({ type: "command", seat: mySeat, cmd, args, clientId: myClientId });
   // Το ταμπλό/HUD περιμένουν τα fx, αλλά το action bar καθρεφτίζει ΑΜΕΣΩΣ
   // ότι η εντολή στάλθηκε — αλλιώς μένει κολλημένο σε Confirm/Cancel.
   refreshActions(state);
@@ -653,7 +698,7 @@ const handlers = {
   endTurn: () => {
     // Δικλείδα: αν δεν έχει ξοδέψει την ενέργειά του, ζήτα δεύτερο tap
     if (state && state.phase === "playing" && !state.turn.actionUsed && !state.turn.over &&
-        Date.now() - endTapAt > 2500) {
+        Date.now() - endTapAt > 5000) {
       endTapAt = Date.now();
       ui.toast("Action unused — tap End again to confirm.");
       return;
@@ -679,7 +724,7 @@ const handlers = {
     ui.showPickerSheet("Drink a potion", hero.potions.map((p, i) => ({
       id: `${p}#${i}`, icon: "🧪",
       name: p === "heal2" ? "Healing Potion" : "Potion of Fury",
-      desc: p === "heal2" ? "Restore up to 4 Body" : "+1 attack die on your next attack",
+      desc: p === "heal2" ? `Restore up to ${RULES.potionHeal} Body` : "+1 attack die on your next attack",
     })), (id) => issue("drinkPotion", { potion: id.split("#")[0] }));
   },
   beginAttack: () => {

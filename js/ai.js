@@ -128,9 +128,12 @@ export function runMonsterPhase(s, resolveAttack) {
       continue;
     }
 
-    // Mistveil: τα τέρατα αγνοούν καλυμμένους ήρωες αν υπάρχει άλλος στόχος
+    // Mistveil: τα τέρατα ΔΕΝ χτυπούν καλυμμένους ήρωες — αν όλοι είναι
+    // καλυμμένοι (π.χ. σόλο mystic) πλησιάζουν αλλά δεν επιτίθενται,
+    // αλλιώς το ξόρκι θα ήταν άχρηστο στο solo.
     const unveiled = aliveHeroes.filter((h) => !h.veiled);
     const pool = unveiled.length ? unveiled : aliveHeroes;
+    const canAttack = unveiled.length > 0;
     const isFlank = def.role === "flank";
     const adjHeroes = pool.filter((h) => isAdjacent(monster, h));
 
@@ -146,7 +149,7 @@ export function runMonsterPhase(s, resolveAttack) {
 
     // Δίπλα σε ήρωα; χτύπα τον καλύτερο στόχο (focus fire, όχι απλώς τον πιο
     // χτυπημένο): λαβωμένος + απομονωμένος + κειμηλιοφόρος.
-    if (adjHeroes.length) {
+    if (canAttack && adjHeroes.length) {
       const target = adjHeroes
         .sort((a, b) => targetScore(s, b) - targetScore(s, a) || a.id.localeCompare(b.id))[0];
       resolveAttackWrapper(s, monster, target, def.attack, resolveAttack);
@@ -157,7 +160,7 @@ export function runMonsterPhase(s, resolveAttack) {
 
     // CASTER: ήδη σε εμβέλεια hexspit; Φτύσε χωρίς να πλησιάσεις —
     // ο acolyte κρατά απόσταση πίσω από τα τέρατα της πρώτης γραμμής.
-    if (def.ranged) {
+    if (canAttack && def.ranged) {
       const spit = spitTarget(s, board, monster, pool, def);
       if (spit) {
         castHexspit(s, board, monster, spit, def, resolveAttack);
@@ -241,11 +244,11 @@ export function runMonsterPhase(s, resolveAttack) {
     }
 
     // Μετά την κίνηση: χτύπημα σε επαφή, αλλιώς hexspit αν βγήκε γωνία
-    if (chosen && isAdjacent(monster, chosen.hero)) {
+    if (canAttack && chosen && isAdjacent(monster, chosen.hero)) {
       resolveAttackWrapper(s, monster, chosen.hero, def.attack, resolveAttack);
       actions.push({ type: "attack", id: monster.id, target: chosen.hero.id });
       if (s.phase !== "playing") break;
-    } else if (def.ranged) {
+    } else if (canAttack && def.ranged) {
       const spit = spitTarget(s, board, monster, pool, def);
       if (spit) {
         castHexspit(s, board, monster, spit, def, resolveAttack);

@@ -28,10 +28,11 @@ export const rollDie = (rng) => 1 + Math.floor(rng() * 6);
 export const rollCombat = (rng, count) =>
   Array.from({ length: count }, () => DIE_FACES[Math.floor(rng() * 6)]);
 
-export function createGame(quest, players, seed, carry = {}) {
+export function createGame(quest, players, seed, carry = {}, opts = {}) {
   // players: [{ seat, name, heroId }]
   // carry: μόνιμο «σακίδιο» καμπάνιας ανά heroId — {gold, potions, artifacts,
   // equipment}. Σώμα/ξόρκια/στάτους ξεκινούν πάντα φρέσκα σε κάθε quest.
+  // opts.scale=false: χωρίς κλιμάκωση μικρού πάρτι (tests/έλεγχοι).
   const board = buildBoard(quest);
   const startArea = quest.start.area;
   const startCells = cellsOfArea(board, startArea)
@@ -70,6 +71,27 @@ export function createGame(quest, players, seed, carry = {}) {
     };
   }
 
+  // Κλιμάκωση δυσκολίας για μικρά πάρτι: ένας ήρωας απέναντι σε 25-29 τέρατα
+  // δεν βγαίνει με καμία στρατηγική (playtest: 3/3 ήττες στο quest01).
+  // Αραιώνουμε ντετερμινιστικά ανά περιοχή — τα αφεντικά και τουλάχιστον
+  // 1 τέρας ανά περιοχή μένουν πάντα.
+  if (players.length <= 2 && opts.scale !== false) {
+    const keep = players.length === 1 ? 0.5 : 0.75;
+    const byArea = {};
+    for (const m of Object.values(monsters)) {
+      if (MONSTERS[m.type].boss) continue;
+      (byArea[m.area] ||= []).push(m);
+    }
+    for (const list of Object.values(byArea)) {
+      const target = Math.max(1, Math.round(list.length * keep));
+      while (list.length > target) delete monsters[list.pop().id];
+    }
+  }
+  // Σόλο πρόνοια: χωρίς Armory πριν το quest01 δεν υπάρχει οικονομία θεραπείας
+  if (players.length === 1 && opts.scale !== false) {
+    Object.values(heroes)[0].potions.push("heal2", "heal2");
+  }
+
   const doors = {};
   for (const d of quest.doors) doors[d.id] = { open: false, revealed: !d.secret };
 
@@ -95,6 +117,9 @@ export function createGame(quest, players, seed, carry = {}) {
   };
   initDm(s); // Digital DM: αφηγητής + pacing (state.dm, ή null αν κλειστός)
   draftSpellSchools(s);
+  if (players.length === 1) {
+    pushLog(s, "🕯 The crypt thins its garrison for a lone challenger — and slips two draughts into your pack.", "spell");
+  }
   return s;
 }
 
@@ -315,7 +340,7 @@ function spawnWandering(s, board, hero) {
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const x = hero.x + dx, y = hero.y + dy;
     if (areaAt(board, x, y) && !monsterAt(s, x, y) && !heroAt(s, x, y)) {
-      const id = `w${s.rngCalls}`;
+      const id = `wm${s.rngCalls}`;
       s.monsters[id] = { id, type, x, y, area: areaAt(board, x, y), body: def.body, alive: true, held: false };
       dmEvent(s, "wandering"); // ο αφηγητής προλογίζει το κακό
       pushFx(s, { t: "banner", text: `👁 A ${def.name} lunges from the shadows!`, ms: 1700 });

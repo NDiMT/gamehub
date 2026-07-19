@@ -275,15 +275,23 @@ export function dmPacing(s, board) {
   const furniture = new Set(
     (s.quest.furniture || []).map((f) => f.cell.join(","))
   );
-  const spots = [];
-  for (const a of s.quest.areas || []) {
-    if (a.type !== "corridor" || !s.revealed[a.id]) continue;
-    for (const [x, y] of cellsOfArea(board, a.id)) {
-      if (occupied(x, y) || furniture.has(`${x},${y}`)) continue;
-      const d = Math.min(...heroes.map((h) => Math.abs(h.x - x) + Math.abs(h.y - y)));
-      if (d >= 4) spots.push({ x, y, d, area: a.id });
+  // Πρώτα διάδρομοι· αν δεν υπάρχει αποκαλυμμένος διάδρομος (π.χ. η ομάδα
+  // κάθεται ακόμα στο αρχικό δωμάτιο) η περίπολος μπαίνει σε αποκαλυμμένο
+  // δωμάτιο — η στασιμότητα δεν πρέπει να είναι ποτέ «ασφαλής».
+  const collect = (type) => {
+    const spots = [];
+    for (const a of s.quest.areas || []) {
+      if (a.type !== type || !s.revealed[a.id]) continue;
+      for (const [x, y] of cellsOfArea(board, a.id)) {
+        if (occupied(x, y) || furniture.has(`${x},${y}`)) continue;
+        const d = Math.min(...heroes.map((h) => Math.abs(h.x - x) + Math.abs(h.y - y)));
+        if (d >= 4) spots.push({ x, y, d, area: a.id });
+      }
     }
-  }
+    return spots;
+  };
+  let spots = collect("corridor");
+  if (!spots.length) spots = collect("room");
   if (!spots.length) return;
   spots.sort((a, b) => b.d - a.d || key(a.x, a.y).localeCompare(key(b.x, b.y)));
 
@@ -301,7 +309,13 @@ export function dmPacing(s, board) {
       id, type, x: spot.x, y: spot.y, area: spot.area,
       body: def.body, alive: true, held: false,
     };
-    pushFx(s, { t: "banner", text: `👁 A ${def.name} prowls into the ${spot.area.replace(/_/g, " ")}!`, ms: 1600 });
-    pushLog(s, `👁 A patrolling ${def.name} enters the halls.`, "monster");
+    // Δεύτερο μέλος περιπόλου: άλλη ατάκα, να μη μοιάζει με glitch
+    if (i === 0) {
+      pushFx(s, { t: "banner", text: `👁 A ${def.name} prowls into the ${spot.area.replace(/_/g, " ")}!`, ms: 1600 });
+      pushLog(s, `👁 A patrolling ${def.name} enters the halls.`, "monster");
+    } else {
+      pushFx(s, { t: "banner", text: `…and another set of footsteps answers the first.`, ms: 1400 });
+      pushLog(s, `👁 A second ${def.name} follows close behind.`, "monster");
+    }
   }
 }

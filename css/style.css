@@ -375,7 +375,14 @@ input {
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.75), inset 0 0 24px rgba(0, 0, 0, 0.6);
   min-width: 230px;
 }
-.banner-text { font-size: 1.05rem; letter-spacing: 1px; color: var(--parchment); white-space: nowrap; }
+/* Οι ατάκες του DM ξεπερνούν εύκολα το πλάτος κινητού — τυλίγουμε αντί να κόβουμε */
+.banner-text {
+  font-size: 1.05rem; letter-spacing: 1px; color: var(--parchment);
+  white-space: normal;
+  max-width: min(82vw, 340px);
+  line-height: 1.4;
+  text-wrap: balance;
+}
 .banner-pop { animation: bannerPop 0.3s cubic-bezier(0.2, 1.6, 0.4, 1); }
 @keyframes bannerPop {
   from { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }

@@ -34,8 +34,10 @@ export function broadcastTransport() {
       const handlers = { join: [], command: [] };
       ch.onmessage = (e) => {
         const msg = e.data;
-        if (msg.type === "hello") handlers.join.forEach((cb) => cb(msg));
-        else if (msg.type === "command") handlers.command.forEach((cb) => cb(msg));
+        // senderId: στο BC είναι ο αυτο-δηλωμένος clientId (τοπικό transport
+        // δοκιμών — στο PeerJS ο senderId είναι το πραγματικό peer id)
+        if (msg.type === "hello") handlers.join.forEach((cb) => cb(msg, msg.clientId));
+        else if (msg.type === "command") handlers.command.forEach((cb) => cb(msg, msg.clientId));
       };
       return {
         onGuestJoin: (cb) => handlers.join.push(cb),
@@ -48,7 +50,7 @@ export function broadcastTransport() {
       const ch = new BroadcastChannel(PREFIX + code);
       const handlers = { state: [], closed: [] };
       ch.onmessage = (e) => {
-        if (e.data.type === "state" || e.data.type === "lobby") handlers.state.forEach((cb) => cb(e.data));
+        if (["state", "lobby", "lobbyFull"].includes(e.data.type)) handlers.state.forEach((cb) => cb(e.data));
       };
       return {
         onState: (cb) => handlers.state.push(cb),
@@ -78,8 +80,9 @@ export function peerTransport() {
         conn.on("open", () => conns.add(conn));
         conn.on("close", () => conns.delete(conn));
         conn.on("data", (msg) => {
-          if (msg.type === "hello") handlers.join.forEach((cb) => cb(msg, conn));
-          else if (msg.type === "command") handlers.command.forEach((cb) => cb(msg));
+          // conn.peer = αδιάψευστη ταυτότητα σύνδεσης — δένει seat με αποστολέα
+          if (msg.type === "hello") handlers.join.forEach((cb) => cb(msg, conn.peer));
+          else if (msg.type === "command") handlers.command.forEach((cb) => cb(msg, conn.peer));
         });
       });
       return {
@@ -104,7 +107,7 @@ export function peerTransport() {
       });
       const handlers = { state: [], closed: [] };
       conn.on("data", (msg) => {
-        if (msg.type === "state" || msg.type === "lobby") handlers.state.forEach((cb) => cb(msg));
+        if (["state", "lobby", "lobbyFull"].includes(msg.type)) handlers.state.forEach((cb) => cb(msg));
       });
       conn.on("close", () => handlers.closed.forEach((cb) => cb()));
       return {
