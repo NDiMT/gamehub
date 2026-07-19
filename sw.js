@@ -1,5 +1,5 @@
 // Cache-first service worker. Ανέβασε το CACHE_VERSION σε κάθε deploy.
-const CACHE_VERSION = "cryptbound-v16";
+const CACHE_VERSION = "cryptbound-v17";
 
 const CORE_ASSETS = [
   ".", "index.html", "css/style.css",
