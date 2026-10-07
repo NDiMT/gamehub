@@ -273,16 +273,18 @@ const WORDS=[['ΜΑΜΑ','μαμά','μα, μά'],['ΓΑΤΑ','γάτα','γά, 
 const LS={get(k,d){try{const v=localStorage.getItem('kerauno.'+k);return v==null?d:(+v||0);}catch(e){return d;}},set(k,v){try{localStorage.setItem('kerauno.'+k,String(v));}catch(e){}}};
 G.li=LS.get('li',0);G.wi=LS.get('wi',0);
 let VOICE=null;
-function pickVoice(){try{VOICE=speechSynthesis.getVoices().find(v=>/^el/i.test(v.lang))||null;}catch(e){}}
+const FEMALE=/melina|athina|μελίνα|αθηνά|female|woman|γυναίκα|google/i,MALE=/stefanos|nikos|στέφανος|male/i;
+function pickVoice(){try{const el=speechSynthesis.getVoices().filter(v=>/^el/i.test(v.lang));
+  VOICE=el.find(v=>FEMALE.test(v.name))||el.find(v=>!MALE.test(v.name))||el[0]||null;}catch(e){}}
 try{pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}catch(e){}
-function speakNow(txt){try{if(!VOICE)pickVoice();const u=new SpeechSynthesisUtterance(txt);u.lang='el-GR';if(VOICE)u.voice=VOICE;u.rate=.8;u.pitch=1.15;u.volume=1;
+function speakNow(txt){try{if(!VOICE)pickVoice();const u=new SpeechSynthesisUtterance(txt);u.lang='el-GR';if(VOICE)u.voice=VOICE;u.rate=.8;u.pitch=VOICE&&MALE.test(VOICE.name)&&!FEMALE.test(VOICE.name)?1.35:1.1;u.volume=1;
   if(musicNode&&musicOn){musicNode.gain.value=.03;u.onend=u.onerror=()=>{if(musicOn&&musicNode)musicNode.gain.value=.1;};}
   speechSynthesis.resume();speechSynthesis.speak(u);}catch(e){}}
 function say(txt,delay=0){const go=()=>{try{if(speechSynthesis.speaking||speechSynthesis.pending){speechSynthesis.cancel();setTimeout(()=>speakNow(txt),80);}else speakNow(txt);}catch(e){}};
   if(delay>0)setTimeout(go,delay);else go();}
 const wanted=()=>G.mode==='letters'?G.target:G.word[G.pos];
 const spoken=()=>WORDS[G.wi%WORDS.length][1];
-function sayPrompt(delay=0,tap=false){if(G.mode==='words'&&tap&&G.pos>0){say(`${spoken()}. Βρες το ${NAME[wanted()]}.`,delay);return;}
+function sayPrompt(delay=0,tap=false){if(G.mode==='words'){say(spoken(),delay);return;}
   if(G.mode==='letters')say(`Βρες το ${NAME[G.target]}!`,delay);
   else if(G.pos===0)say(`Ας γράψουμε: ${spoken()}! Βρες το ${NAME[G.word[0]]}.`,delay);
   else say(`Βρες το ${NAME[wanted()]}.`,delay);}
@@ -297,15 +299,15 @@ function newLearnRound(now,delay=600){G.clouds=[];G.cleared=0;G.winT=-99;const R
   letters.forEach((ch,k)=>G.clouds.push({x:LW*(.12+R()*.76),y:LH*(.19+(k/(n-1))*.27),s,dir:k%2?-1:1,vx:24+R()*22,ph:R()*6,hp:1,big:false,state:'grumpy',t0:now,hit:-9,laugh:-9,letter:ch}));
   sayPrompt(delay);}
 function learnHit(c,now){if(!G.started||c.state!=='grumpy'||!G.clouds.includes(c))return;
-  if(c.letter!==wanted()){c.laugh=now;sBoing();buzz(15);say(`Αυτό είναι το ${NAME[c.letter]}. Βρες το ${NAME[wanted()]}!`);return;}
+  if(c.letter!==wanted()){c.laugh=now;sBoing();buzz(15);if(G.mode==='letters')say(`Αυτό είναι το ${NAME[c.letter]}. Βρες το ${NAME[wanted()]}!`);return;}
   c.state='nice';c.t0=now;c.hit=now;G.cleared++;G.cheer=now;sPoof(G.cleared);buzz(30);
   G.fx.push({k:'impact',x:c.x,y:c.y,r:150*c.s/.6,t0:now,col:'#ffd83a'});
   if(G.mode==='words'){G.pos++;G.slotT=now;}
   if(G.cleared>=G.need){G.winT=now+.6;setTimeout(()=>sWin(),600);
     if(G.mode==='letters'){say(`${NAME[c.letter]}! Μπράβο!`);G.li++;LS.set('li',G.li);}
-    else{const W=WORDS[G.wi%WORDS.length];say(`${W[2]}... ${W[1]}! Μπράβο!`,350);G.wi++;LS.set('wi',G.wi);}}
+    else{say(spoken(),350);G.wi++;LS.set('wi',G.wi);}}
   else if(G.mode==='letters')say(`${NAME[c.letter]}! Βρες κι άλλο ${NAME[G.target]}.`);
-  else say(`${NAME[c.letter]}! Τώρα το ${NAME[wanted()]}.`);}
+}
 function startMode(m,now){G.started=true;G.mode=m;G.bolts=[];G.fx=[];if(m==='classic'){G.round=1;newRound(now);}else newLearnRound(now,0);sBoing();}
 function goHome(){G.started=false;G.clouds=[];G.bolts=[];G.cleared=0;G.winT=-99;try{speechSynthesis.cancel();}catch(e){}}
 function kidPos(){return {x:LW*(LW>LH?.3:.27),y:GY};}
