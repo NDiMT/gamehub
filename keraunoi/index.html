@@ -3,6 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#3d4258">
 <title>Κεραυνοί στα Σύννεφα</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&display=swap">
 <style>
 :root{--paper:#f3ebdc;color-scheme:light}
 html,body{height:100%;margin:0;background:var(--paper);overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
@@ -11,7 +12,7 @@ canvas{position:fixed;left:0;top:0;display:block}
 #paper{mix-blend-mode:multiply;pointer-events:none}
 </style>
 </head><body>
-<canvas id="c" aria-label="Παιχνίδι: άγγιξε τα σύννεφα για κεραυνό, κράτα πατημένο για μεγάλο κεραυνό"></canvas><canvas id="paper"></canvas>
+<canvas id="c" aria-label="Παιχνίδι: άγγιξε τα σύννεφα για κεραυνό, κράτα πατημένο για μεγάλο κεραυνό. Επίλεξε Κεραυνοί, Γράμματα ή Λέξεις."></canvas><canvas id="paper"></canvas>
 <script>
 let W=1920,H=1080;const OL='#3a302a';
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),pc=document.getElementById('paper');
@@ -194,6 +195,10 @@ function cloud(x,y,s,o={}){
     for(const sd of [-1,1]) eye(sd,(ex,ey)=>{ctx.fillStyle='#1d1a18';ctx.beginPath();ctx.ellipse(ex,ey,14,18,0,0,7);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(ex-4,ey-6,5,0,7);ctx.fill();});
     ctx.fillStyle='rgba(255,140,160,.6)';for(const sd of [-1,1]){ctx.beginPath();ctx.ellipse(sd*125,25,30,16,0,0,7);ctx.fill();}
     P(()=>{ctx.moveTo(-40,50);ctx.quadraticCurveTo(0,90,40,50);},null,11);
+  } else if(mood==='letter'){
+    for(const sd of [-1,1]){const ex=sd*125,ey=-100;P(E(ex,ey,26,24),'#fff',7);ctx.fillStyle='#1d1a18';ctx.beginPath();ctx.arc(ex+(o.lx||0)*.6,ey+4,11,0,7);ctx.fill();}
+    ctx.font=`700 240px ${LFONT}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
+    ctx.lineWidth=26;ctx.strokeStyle=OL;ctx.strokeText(o.letter,0,50);ctx.fillStyle='#fff6d6';ctx.fillText(o.letter,0,50);
   }
   ctx.restore();
 }
@@ -255,10 +260,54 @@ function setMusic(on){musicOn=on;if(musicNode)musicNode.gain.value=on?.1:0;}
 function buzz(ms){try{navigator.vibrate&&navigator.vibrate(ms);}catch(e){}}
 
 // ---------- state ----------
-const G={started:false,round:1,clouds:[],cleared:0,need:6,bolts:[],fx:[],cheer:-9,winT:-99,mega:-99,now:0,hold:null,charge:0,sunK:0,seed:1};
+const G={started:false,mode:'classic',li:0,wi:0,pos:0,word:'',target:'',slotT:-9,round:1,clouds:[],cleared:0,need:6,bolts:[],fx:[],cheer:-9,winT:-99,mega:-99,now:0,hold:null,charge:0,sunK:0,seed:1};
 function spawnCloud(i,now){const R=rng(G.seed++*97),big=i===G.need-1&&G.round>=1;const s=(big?1:.42+R()*.18)*(LH>1200?.62:.75);
   const dir=R()<.5?-1:1;return {x:dir>0?-300*s-R()*LW*.6:LW+300*s+R()*LW*.6,y:LH*(.1+R()*.33),s,dir,vx:(70+R()*50+G.round*18)*(big?.6:1),ph:R()*6,hp:big?3:1,big,state:'grumpy',t0:now,hit:-9};}
 function newRound(now){G.clouds=[];G.cleared=0;G.need=5+Math.min(G.round,5);for(let i=0;i<G.need;i++)G.clouds.push(spawnCloud(i,now));G.winT=-99;}
+// ---------- learning modes: letters & words ----------
+const LFONT='Comfortaa,"Arial Rounded MT Bold","Trebuchet MS",Arial,sans-serif';
+try{document.fonts.load('700 40px Comfortaa','ΑΒΓ');}catch(e){}
+const NAME={'Α':'άλφα','Β':'βήτα','Γ':'γάμμα','Δ':'δέλτα','Ε':'έψιλον','Ζ':'ζήτα','Η':'ήτα','Θ':'θήτα','Ι':'γιώτα','Κ':'κάπα','Λ':'λάμδα','Μ':'μι','Ν':'νι','Ξ':'ξι','Ο':'όμικρον','Π':'πι','Ρ':'ρο','Σ':'σίγμα','Τ':'ταυ','Υ':'ύψιλον','Φ':'φι','Χ':'χι','Ψ':'ψι','Ω':'ωμέγα'};
+const ORDER='ΑΜΠΤΟΛΕΣΝΚΙΡΓΔΒΧΦΖΘΗΥΩΞΨ'.split('');
+const WORDS=[['ΜΑΜΑ','μαμά','μα, μά'],['ΓΑΤΑ','γάτα','γά, τα'],['ΝΕΡΟ','νερό','νε, ρό'],['ΜΗΛΟ','μήλο','μή, λο'],['ΠΑΠΙΑ','πάπια','πά, πια'],['ΜΠΑΛΑ','μπάλα','μπά, λα'],['ΣΠΙΤΙ','σπίτι','σπί, τι'],['ΜΠΑΜΠΑΣ','μπαμπάς','μπα, μπάς']];
+const LS={get(k,d){try{const v=localStorage.getItem('kerauno.'+k);return v==null?d:(+v||0);}catch(e){return d;}},set(k,v){try{localStorage.setItem('kerauno.'+k,String(v));}catch(e){}}};
+G.li=LS.get('li',0);G.wi=LS.get('wi',0);
+let VOICE=null;
+function pickVoice(){try{VOICE=speechSynthesis.getVoices().find(v=>/^el/i.test(v.lang))||null;}catch(e){}}
+try{pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}catch(e){}
+function speakNow(txt){try{if(!VOICE)pickVoice();const u=new SpeechSynthesisUtterance(txt);u.lang='el-GR';if(VOICE)u.voice=VOICE;u.rate=.8;u.pitch=1.15;u.volume=1;
+  if(musicNode&&musicOn){musicNode.gain.value=.03;u.onend=u.onerror=()=>{if(musicOn&&musicNode)musicNode.gain.value=.1;};}
+  speechSynthesis.resume();speechSynthesis.speak(u);}catch(e){}}
+function say(txt,delay=0){const go=()=>{try{if(speechSynthesis.speaking||speechSynthesis.pending){speechSynthesis.cancel();setTimeout(()=>speakNow(txt),80);}else speakNow(txt);}catch(e){}};
+  if(delay>0)setTimeout(go,delay);else go();}
+const wanted=()=>G.mode==='letters'?G.target:G.word[G.pos];
+const spoken=()=>WORDS[G.wi%WORDS.length][1];
+function sayPrompt(delay=0,tap=false){if(G.mode==='words'&&tap&&G.pos>0){say(`${spoken()}. Βρες το ${NAME[wanted()]}.`,delay);return;}
+  if(G.mode==='letters')say(`Βρες το ${NAME[G.target]}!`,delay);
+  else if(G.pos===0)say(`Ας γράψουμε: ${spoken()}! Βρες το ${NAME[G.word[0]]}.`,delay);
+  else say(`Βρες το ${NAME[wanted()]}.`,delay);}
+function newLearnRound(now,delay=600){G.clouds=[];G.cleared=0;G.winT=-99;const R=rng(G.seed++*131);let letters;
+  if(G.mode==='letters'){const L=ORDER[G.li%ORDER.length];G.target=L;const pool=ORDER.slice(0,Math.max(6,G.li%ORDER.length+3)).filter(x=>x!==L),d=[];
+    while(d.length<3){const x=pool[Math.floor(R()*pool.length)];if(!d.includes(x))d.push(x);}
+    letters=[L,L,...d];G.need=2;}
+  else{const w=WORDS[G.wi%WORDS.length][0];G.word=w;G.pos=0;letters=w.split('');const pool=ORDER.filter(x=>!w.includes(x));
+    for(let i=0;i<(w.length<=4?2:1);i++)letters.push(pool[Math.floor(R()*pool.length)]);G.need=w.length;}
+  for(let i=letters.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[letters[i],letters[j]]=[letters[j],letters[i]];}
+  const n=letters.length,s=(n>6?.54:.64)*(LH>1200?.62:.55);
+  letters.forEach((ch,k)=>G.clouds.push({x:LW*(.12+R()*.76),y:LH*(.19+(k/(n-1))*.27),s,dir:k%2?-1:1,vx:24+R()*22,ph:R()*6,hp:1,big:false,state:'grumpy',t0:now,hit:-9,laugh:-9,letter:ch}));
+  sayPrompt(delay);}
+function learnHit(c,now){if(!G.started||c.state!=='grumpy'||!G.clouds.includes(c))return;
+  if(c.letter!==wanted()){c.laugh=now;sBoing();buzz(15);say(`Αυτό είναι το ${NAME[c.letter]}. Βρες το ${NAME[wanted()]}!`);return;}
+  c.state='nice';c.t0=now;c.hit=now;G.cleared++;G.cheer=now;sPoof(G.cleared);buzz(30);
+  G.fx.push({k:'impact',x:c.x,y:c.y,r:150*c.s/.6,t0:now,col:'#ffd83a'});
+  if(G.mode==='words'){G.pos++;G.slotT=now;}
+  if(G.cleared>=G.need){G.winT=now+.6;setTimeout(()=>sWin(),600);
+    if(G.mode==='letters'){say(`${NAME[c.letter]}! Μπράβο!`);G.li++;LS.set('li',G.li);}
+    else{const W=WORDS[G.wi%WORDS.length];say(`${W[2]}... ${W[1]}! Μπράβο!`,350);G.wi++;LS.set('wi',G.wi);}}
+  else if(G.mode==='letters')say(`${NAME[c.letter]}! Βρες κι άλλο ${NAME[G.target]}.`);
+  else say(`${NAME[c.letter]}! Τώρα το ${NAME[wanted()]}.`);}
+function startMode(m,now){G.started=true;G.mode=m;G.bolts=[];G.fx=[];if(m==='classic'){G.round=1;newRound(now);}else newLearnRound(now,0);sBoing();}
+function goHome(){G.started=false;G.clouds=[];G.bolts=[];G.cleared=0;G.winT=-99;try{speechSynthesis.cancel();}catch(e){}}
 function kidPos(){return {x:LW*(LW>LH?.3:.27),y:GY};}
 function pikaPos(){return {x:LW*(LW>LH?.62:.7),y:GY};}
 const KSg=()=>LH>1200?.62:.46, PSg=()=>LH>1200?.56:.42;
@@ -269,17 +318,19 @@ function hitCloud(c,dmg,now){c.hp-=dmg;c.hit=now;if(c.hp<=0){c.state='nice';c.t0
     G.fx.push({k:'impact',x:c.x,y:c.y,r:150*c.s/.6,t0:now,col:'#ffd83a'});
     if(G.cleared>=G.need){G.winT=now+.6;setTimeout(()=>sWin(),600);}}
   else G.fx.push({k:'impact',x:c.x+120*c.s,y:c.y-80*c.s,r:70,t0:now,col:'#ffb13a'});}
-function fire(tx,ty,mega,now){const air=mega?220:0,c0=cheek(air);let c=mega?(nearestCloud(true)||nearestCloud(false)):cloudAt(tx,ty);
+function fire(tx,ty,mega,now){const air=mega?220:0,c0=cheek(air);let c=mega&&G.mode==='classic'?(nearestCloud(true)||nearestCloud(false)):cloudAt(tx,ty);
   const x2=c?c.x:tx,y2=c?c.y+30*c.s:ty;G.bolts.push({x1:c0.x,y1:c0.y,x2,y2,w:mega?40:20,t0:now,dur:mega?.9:.3,seed:(Math.random()*1e6)|0,mega});
   sZap(mega);buzz(mega?120:20);if(mega)G.mega=now;
-  if(c)setTimeout(()=>hitCloud(c,mega?9:1,G.now),60);}
+  if(c)setTimeout(()=>G.mode==='classic'?hitCloud(c,mega?9:1,G.now):learnHit(c,G.now),60);}
 
 // ---------- input ----------
 let chargeSnd=null;
 cv.addEventListener('pointerdown',e=>{e.preventDefault();audioInit();if(AC&&AC.state==='suspended')AC.resume();
   const x=e.clientX*DPR/SC,y=e.clientY*DPR/SC;
-  if(!G.started){G.started=true;newRound(G.now);sBoing();return;}
+  if(!G.started){const m=menuAt(x,y);if(m)startMode(m,G.now);return;}
   if(hitMusic(x,y)){setMusic(!musicOn);return;}
+  if(hitHome(x,y)){goHome();return;}
+  if(G.mode!=='classic'&&hitBanner(x,y)){sayPrompt(0,true);return;}
   G.hold={x,y,t:G.now};});
 addEventListener('pointerup',e=>{if(!G.hold)return;const held=G.now-G.hold.t,x=e.clientX*DPR/SC,y=e.clientY*DPR/SC;
   if(chargeSnd){try{chargeSnd.g.gain.value=0;chargeSnd.o.stop();}catch(_){}chargeSnd=null;}
@@ -287,6 +338,13 @@ addEventListener('pointerup',e=>{if(!G.hold)return;const held=G.now-G.hold.t,x=e
 addEventListener('pointercancel',()=>{G.hold=null;if(chargeSnd){try{chargeSnd.o.stop();}catch(_){}chargeSnd=null;}});
 function musicBtn(){return {x:LW-70,y:70+ (LH>1200?30:0),r:44};}
 function hitMusic(x,y){const b=musicBtn();return Math.hypot(x-b.x,y-b.y)<b.r+10;}
+function homeBtn(){return {x:70,y:70+(LH>1200?30:0),r:44};}
+function hitHome(x,y){const b=homeBtn();return Math.hypot(x-b.x,y-b.y)<b.r+10;}
+const bannerY=()=>LH>1200?100:72;
+function hitBanner(x,y){return Math.abs(x-LW/2)<260&&y>bannerY()-70&&y<bannerY()+100;}
+const MENU=[['classic','ΚΕΡΑΥΝΟΙ','ρίξε κεραυνούς','#ffd83a'],['letters','ΓΡΑΜΜΑΤΑ','βρες το γράμμα','#9fd4ff'],['words','ΛΕΞΕΙΣ','γράψε λέξεις','#ffb8c4']];
+function menuCards(){const port=LH>LW;return MENU.map((m,i)=>port?{m,x:LW/2,y:LH*(.17+i*.125),w:Math.min(560,LW*.76),h:160,port}:{m,x:LW*(.22+i*.28),y:LH*.34,w:Math.min(380,LW*.25),h:250,port});}
+function menuAt(x,y){for(const c of menuCards())if(Math.abs(x-c.x)<c.w/2&&Math.abs(y-c.y)<c.h/2)return c.m[0];return null;}
 
 // ---------- scene drawing (world scales with the screen) ----------
 function sky(storm){const g=ctx.createLinearGradient(0,0,0,GY);g.addColorStop(0,mix('#48b8ff','#3d4258',storm));g.addColorStop(1,mix('#c8ecff','#7b7f92',storm));ctx.fillStyle=g;ctx.fillRect(-50,-50,LW+100,LH+100);}
@@ -308,6 +366,34 @@ function playIcon(t){const x=LW/2,y=LH*.42,r=110+Math.sin(t*4)*6;ctx.save();P(C(
 function noteIcon(){const b=musicBtn();ctx.save();ctx.globalAlpha=.9;P(C(b.x,b.y,b.r),'#fffdf5',7);
   P(()=>{ctx.moveTo(b.x-6,b.y+14);ctx.lineTo(b.x-6,b.y-20);ctx.lineTo(b.x+16,b.y-26);ctx.lineTo(b.x+16,b.y+8);},null,6);P(E(b.x-13,b.y+15,9,7),PENCIL,3);P(E(b.x+9,b.y+9,9,7),PENCIL,3);
   if(!musicOn)P(()=>{ctx.moveTo(b.x-28,b.y-28);ctx.lineTo(b.x+28,b.y+28);},null,8);ctx.restore();}
+function menuIcon(id,x,y,k){ctx.save();ctx.translate(x,y);ctx.scale(k,k);
+  if(id==='classic')P(poly([[-10,-48],[30,-48],[8,-8],[34,-8],[-22,52],[-4,4],[-30,4]]),'#fffbe6',7);
+  else{P(C(0,0,52),'#fffbe6',7);ctx.font=`700 ${id==='letters'?66:44}px ${LFONT}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=PENCIL;ctx.fillText(id==='letters'?'Α':'ΜΑ',0,4);}
+  ctx.restore();}
+function drawMenu(t){for(const [i,c] of menuCards().entries()){const [id,label,sub,col]=c.m,b=1+Math.sin(t*3+i*1.3)*.015;
+  ctx.save();ctx.translate(c.x,c.y);ctx.scale(b,b);P(()=>ctx.roundRect(-c.w/2,-c.h/2,c.w,c.h,38),col,10);
+  ctx.fillStyle=PENCIL;ctx.textBaseline='middle';
+  if(c.port){menuIcon(id,-c.w/2+92,0,1);ctx.textAlign='left';ctx.font=`700 54px ${LFONT}`;ctx.fillText(label,-c.w/2+176,-18);ctx.font=`700 30px ${LFONT}`;ctx.globalAlpha=.75;ctx.fillText(sub,-c.w/2+178,32);}
+  else{menuIcon(id,0,-48,1);ctx.textAlign='center';ctx.font=`700 46px ${LFONT}`;ctx.fillText(label,0,46);ctx.font=`700 26px ${LFONT}`;ctx.globalAlpha=.75;ctx.fillText(sub,0,92);}
+  ctx.restore();}}
+function homeIcon(){const b=homeBtn();ctx.save();ctx.globalAlpha=.9;P(C(b.x,b.y,b.r),'#fffdf5',7);
+  P(poly([[b.x-22,b.y-2],[b.x,b.y-22],[b.x+22,b.y-2],[b.x+15,b.y-2],[b.x+15,b.y+20],[b.x-15,b.y+20],[b.x-15,b.y-2]]),'#ffd83a',5);P(()=>ctx.roundRect(b.x-5,b.y+6,10,14,2),PENCIL,3);ctx.restore();}
+function speaker(x,y){P(poly([[x-16,y-8],[x-6,y-8],[x+6,y-18],[x+6,y+18],[x-6,y+8],[x-16,y+8]]),'#fffdf5',5);
+  ctx.strokeStyle=PENCIL;ctx.lineWidth=4;for(const r of [12,22]){ctx.beginPath();ctx.arc(x+8,y,r,-.8,.8);ctx.stroke();}}
+function letterBanner(t){const y=bannerY(),x0=LW/2-210;ctx.save();P(()=>ctx.roundRect(x0,y-54,420,108,30),'#fffdf5',8);
+  ctx.fillStyle=PENCIL;ctx.textAlign='left';ctx.textBaseline='middle';ctx.font=`700 40px ${LFONT}`;ctx.fillText('Βρες το',x0+30,y+2);
+  const r=46+Math.sin(t*5)*2;P(C(x0+268,y,r),'#ffd83a',7);ctx.textAlign='center';ctx.font=`700 64px ${LFONT}`;ctx.fillStyle=PENCIL;ctx.fillText(G.target,x0+268,y+4);
+  speaker(x0+362,y);
+  for(let i=0;i<G.need;i++){const on=i<G.cleared;ctx.globalAlpha=on?1:.5;P(C(LW/2-18+i*36,y+80,13),on?'#ffd83a':'#fffdf5',5);}ctx.restore();}
+function wordBanner(t){const w=G.word,n=w.length,sw=Math.min(78,(LW-300)/n),y=bannerY(),x0=LW/2-n*sw/2;ctx.save();
+  P(()=>ctx.roundRect(x0-24,y-56,n*sw+48,112,30),'#fffdf5',8);ctx.textAlign='center';ctx.textBaseline='middle';
+  for(let i=0;i<n;i++){const cx=x0+sw*(i+.5),done=i<G.pos,cur=i===G.pos&&G.winT<0;
+    const pop=done&&i===G.pos-1?1+.25*bump(t,G.slotT,G.slotT+.35):1,pulse=cur?1+Math.sin(t*6)*.05:1;
+    ctx.save();ctx.translate(cx,y);ctx.scale(pop*pulse,pop*pulse);
+    P(()=>ctx.roundRect(-sw/2+5,-42,sw-10,84,16),done?'#ffd83a':cur?'#fff1a8':'#ffffff',cur?7:5);
+    ctx.font=`700 ${Math.round(sw*.8)}px ${LFONT}`;ctx.fillStyle=PENCIL;ctx.globalAlpha=done?1:cur?.55:.22;ctx.fillText(w[i],0,4);ctx.restore();}
+  P(C(LW/2,y+70,24),'#fffdf5',5);ctx.save();ctx.translate(LW/2-3,y+70);ctx.scale(.6,.6);speaker(0,0);ctx.restore();
+  ctx.restore();}
 function progressSuns(){const n=G.need,sp=46,x0=LW/2-(n-1)*sp/2,y=LH>1200?80:60;for(let i=0;i<n;i++){const on=i<G.cleared;ctx.save();ctx.globalAlpha=on?1:.45;P(C(x0+i*sp,y,15),on?'#ffd83a':'#fffdf5',5);ctx.restore();}}
 
 // ---------- main loop ----------
@@ -325,9 +411,9 @@ function frame(ms){const dt=Math.min(.05,(ms-last)/1000);last=ms;G.now+=dt;const
   sky(storm);
   const sp={x:LW*.78,y:LH*(LH>1200?.17:.2)},ss=(LH>1200?.8:.7)*G.sunK;if(ss>.05)sun(sp.x,sp.y,ss,t);
   rainbow(win?eout(clamp((t-G.winT)/1.5)):0);
-  for(const c of G.clouds){if(c.state==='nice'&&c.y<-300)continue;const hurt=t-c.hit<.45;
-    const mood=c.state==='nice'?'nice':hurt?'hurt':'grumpy';const white=c.state==='nice'?clamp((t-c.t0)/.5):0;
-    cloud(c.x,c.y+Math.sin(t*1.6+c.ph)*10,c.s*(c.state==='nice'?lerp(1,.7,white):1),{mood,sq:hurt?Math.sin(t*50)*.35:0,col:mix(c.big?'#48445c':'#5b5772','#ffffff',white),dark:'#48445c',lx:(pikaPos().x-c.x)/LW*20});
+  for(const c of G.clouds){if(c.state==='nice'&&c.y<-300)continue;const hurt=t-c.hit<.45,laughing=t-(c.laugh??-9)<.9;
+    const mood=c.state==='nice'?'nice':hurt?'hurt':laughing?'laugh':c.letter?'letter':'grumpy';const white=c.state==='nice'?clamp((t-c.t0)/.5):0;
+    cloud(c.x,c.y+Math.sin(t*1.6+c.ph)*10,c.s*(c.state==='nice'?lerp(1,.7,white):1),{mood,sq:hurt?Math.sin(t*50)*.35:0,col:mix(c.big?'#48445c':'#5b5772','#ffffff',white),dark:'#48445c',letter:c.letter,lx:(pikaPos().x-c.x)/LW*20});
     if(c.big&&c.state==='grumpy')for(let i=0;i<c.hp;i++){ctx.save();P(C(c.x-30+i*30,c.y-200*c.s,9),'#ff6f7d',4);ctx.restore();}}
   hills(storm);
   // characters
@@ -351,8 +437,8 @@ function frame(ms){const dt=Math.min(.05,(ms-last)/1000);last=ms;G.now+=dt;const
   ctx.setTransform(1,0,0,1,0,0);const fl=Math.max(G.bolts.length?.18:0,G.mega>0?Math.exp(-Math.pow((t-G.mega-.05)/.2,2))*.8:0);
   if(fl>0){ctx.fillStyle=`rgba(255,252,220,${fl})`;ctx.fillRect(0,0,cv.width,cv.height);}
   ctx.setTransform(SC,0,0,SC,0,0);
-  if(!G.started) playIcon(t); else {progressSuns();noteIcon();}
-  if(win&&t>G.winT+4.2){G.round++;newRound(t);}
+  if(!G.started) drawMenu(t); else {if(G.mode==='classic')progressSuns();else if(G.mode==='letters')letterBanner(t);else wordBanner(t);noteIcon();homeIcon();}
+  if(G.started&&win&&t>G.winT+4.2){if(G.mode==='classic'){G.round++;newRound(t);}else newLearnRound(t);}
   requestAnimationFrame(frame);}
 addEventListener('resize',resize);resize();requestAnimationFrame(frame);
 
